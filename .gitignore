@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+env/
+*.egg-info/
+.pytest_cache/
+
+# macOS
+.DS_Store
+
+# Logi i pliki tymczasowe
+*.log
+*.tmp
+*.bak
+
+# Edytory / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Prywatna warstwa terminologii domenowej (NIE commitować)
+RADA_JEZYKOWA.md
+Chase Hughes Framework/

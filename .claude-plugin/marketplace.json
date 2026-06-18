@@ -1,0 +1,21 @@
+{
+  "name": "sztuczny-miodek",
+  "owner": {
+    "name": "researchanddeploy",
+    "url": "https://github.com/researchanddeploy"
+  },
+  "metadata": {
+    "description": "Marketplace z pluginem sztuczny-miodek — audyt polszczyzny i eradykacja manieryzmu AI.",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "sztuczny-miodek",
+      "source": "./",
+      "description": "Audyt polszczyzny i eradykacja manieryzmu AI (AI-tellów) w tekstach PL i EN — pragmatyczny puryzm Jana Miodka. Twarda bramka jakości przed publikacją.",
+      "version": "1.0.0",
+      "license": "MIT",
+      "keywords": ["polski", "audyt-jezykowy", "ai-tells", "manieryzm-ai"]
+    }
+  ]
+}
