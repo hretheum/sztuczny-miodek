@@ -251,6 +251,46 @@ plik | słowa | trafienia | em-dash/akapit(max) | gęstość/500 | blokery | WER
 
 ---
 
+## Detektory proceduralne (kontrakt)
+
+Reguły wykrywania dzielą się na dwa rozłączne rodzaje — to świadomy, czysty podział (Epik A, A5):
+
+1. **Reguły deklaratywne** — czyste wzorce regex. Mieszkają w `rules.json` (jedno źródło prawdy), ładowane do `MARKER_DEFS` i kompilowane przez `compile_markers()`. Wykrywane jedną wspólną pętlą `finditer`. To one są przedmiotem auto-katalogu niżej.
+
+2. **Reguły proceduralne** — wymagają progów i logiki, których nie da się wyrazić pojedynczym regexem (liczenie myślników na akapit, monotoniczny szyk SVO, nawał łączników-otwarć, emoji w nagłówku, bold-overload). Pozostają funkcjami `detect_*` w `ai_linter.py` i **z założenia NIE trafiają do `rules.json`** ani do auto-katalogu.
+
+**Dlaczego rozdział:** wzorzec regex jest danymi (konfiguracją), a detektor proceduralny jest kodem (algorytmem z progiem). Trzymanie ich osobno pozwala edytować katalog regexów bez dotykania kodu i odwrotnie.
+
+### Rejestr i wołanie po identyfikatorze
+
+Detektory proceduralne są wołane **po identyfikatorze** przez rejestr `DETECTOR_REGISTRY` w `ai_linter.py` — lista par `(detector_id, adapter)` w ustalonej kolejności wykonania. `scan_file` iteruje po rejestrze (nie zna już poszczególnych funkcji `detect_*` z nazwy), a pojedynczy detektor można uruchomić funkcją `run_procedural_detector(detector_id, text, eff_lang)`.
+
+| `detector_id` | Funkcja `detect_*` | ID markera | Klasa | Próg |
+|---|---|---|---|---|
+| `emdash-overuse` | `detect_emdash_overuse` | `PL-TYPO` (PL/both) / `EN-DASH` (en) | block | ≥3 myślniki w akapicie |
+| `emoji-in-heading` | `detect_emoji_in_headings` | `PL-TYPO` | block | dowolne emoji w linii nagłówka |
+| `bold-overload` | `detect_bold_overload` | `PL-TYPO` | review | ≥4 pogrubienia w akapicie |
+| `svo-rhythm` | `detect_svo_rhythm` | `PL-RHYTHM` | review | 3 zdania z tym samym tokenem otwierającym |
+| `connector-overload` | `detect_connector_overload` | `PL-RHYTHM` | block | ≥3 łączniki-otwarcia w pliku |
+
+**Kolejność w rejestrze ma znaczenie** (wyznacza porządek dodawania trafień przed sortowaniem po linii) — nie zmieniaj jej bez powodu.
+
+### Kontrakt adaptera
+
+```
+adapter(text: str, eff_lang: str) -> List[Tuple[int, str, str, str]]
+```
+
+Zwraca listę krotek `(line, mid, klasa, fragment)`:
+- `line` — numer linii 1-based (`int`),
+- `mid` — identyfikator markera (`'PL-TYPO'` | `'EN-DASH'` | `'PL-RHYTHM'` | …),
+- `klasa` — `'block'` | `'review'` (`block` liczy się do blokerów i może dać werdykt FAIL),
+- `fragment` — krótki opis trafienia (`str`).
+
+Adapter jest cienkim wrapperem nad funkcją `detect_*` — progi i logika żyją w `detect_*`, nie w adapterze. Nieznany `detector_id` w `run_procedural_detector` → `KeyError` (świadoma, głośna awaria, by literówka identyfikatora się nie prześliznęła).
+
+---
+
 ## Katalog reguł (auto-generowany z rules.json)
 
 > **Źródło prawdy regexów.** Poniższy katalog (sekcja ujęta w znaczniki „RULES:START" / „RULES:END") jest JEDYNYM miarodajnym źródłem wzorców regex — generowany automatycznie z `rules.json` przez `tools/gen_doc_catalog.py`. Listy „Wzorce techniczne" przy poszczególnych kategoriach wyżej mają charakter wyłącznie opisowy i mogą być NIEKOMPLETNE względem `rules.json` (do czasu pełnej konsolidacji). W razie rozbieżności rozstrzyga ten katalog.

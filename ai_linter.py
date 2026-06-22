@@ -296,6 +296,79 @@ def detect_bold_overload(text: str, lang: str) -> List[Tuple[int, str, str]]:
     return hits
 
 
+# ---------------------------------------------------------------------------
+# REJESTR DETEKTORÓW PROCEDURALNYCH (Epik A: „Reguła jako dane", A5)
+#
+# Czysty rozdział dwóch rodzajów reguł:
+#   1. Reguły DEKLARATYWNE — czyste wzorce regex, mieszkają w rules.json, ładowane do
+#      MARKER_DEFS i kompilowane przez compile_markers(). Wykrywane jedną pętlą po `finditer`.
+#   2. Reguły PROCEDURALNE — wymagają progów i logiki niewyrażalnej regexem (liczenie myślników
+#      na akapit, monotoniczny szyk SVO, nawał łączników, emoji w nagłówku, bold-overload).
+#      Pozostają funkcjami `detect_*` w kodzie i są wołane PO IDENTYFIKATORZE przez ten rejestr.
+#
+# KONTRAKT ADAPTERA PROCEDURALNEGO:
+#   adapter(text: str, eff_lang: str) -> List[Tuple[int, str, str, str]]
+#   Zwraca listę krotek (line, mid, klasa, fragment):
+#     - line     : numer linii 1-based (int),
+#     - mid       : identyfikator markera ('PL-TYPO' | 'EN-DASH' | 'PL-RHYTHM' | ...),
+#     - klasa    : 'block' | 'review'  (block → liczy się do blockers i może dać werdykt FAIL),
+#     - fragment : krótki opis trafienia (str).
+#   Adapter jest cienkim wrapperem nad funkcją detect_* (progi/logika żyją w detect_*, nie tutaj).
+#
+# DETECTOR_REGISTRY: lista (detector_id, adapter) w KOLEJNOŚCI wykonania. Kolejność ma znaczenie —
+# wyznacza porządek dodawania trafień do listy hits (przed końcowym sortowaniem po linii), więc
+# zmiana kolejności mogłaby zmienić wyjście przy remisie linii. NIE zmieniaj bez powodu.
+# Wołanie „po identyfikatorze": detektor wybierany jest przez swój detector_id w rejestrze,
+# a nie przez rozsiane po scan_file magic-stringi.
+# ---------------------------------------------------------------------------
+
+def _proc_emdash(text: str, eff_lang: str) -> List[Tuple[int, str, str, str]]:
+    """Em-dash overuse (≥3/akapit → block). mid zależny od języka: PL-TYPO / EN-DASH."""
+    return [(line, mid, "block", frag) for (line, mid, frag) in detect_emdash_overuse(text, eff_lang)]
+
+
+def _proc_emoji_heading(text: str, eff_lang: str) -> List[Tuple[int, str, str, str]]:
+    """Emoji w nagłówku Markdown → block (PL-TYPO)."""
+    return [(line, "PL-TYPO", "block", frag) for (line, frag) in detect_emoji_in_headings(text)]
+
+
+def _proc_bold(text: str, eff_lang: str) -> List[Tuple[int, str, str, str]]:
+    """Bold-overload (≥4/akapit → review, PL-TYPO)."""
+    return [(line, mid, "review", frag) for (line, mid, frag) in detect_bold_overload(text, eff_lang)]
+
+
+def _proc_svo(text: str, eff_lang: str) -> List[Tuple[int, str, str, str]]:
+    """Monotoniczny szyk SVO (3 zdania z tym samym tokenem → review, PL-RHYTHM)."""
+    return [(line, "PL-RHYTHM", "review", frag) for (line, frag) in detect_svo_rhythm(text)]
+
+
+def _proc_connector(text: str, eff_lang: str) -> List[Tuple[int, str, str, str]]:
+    """Nawał łączników-otwarć (≥3 w pliku → block, PL-RHYTHM)."""
+    return [(line, "PL-RHYTHM", "block", frag) for (line, frag) in detect_connector_overload(text)]
+
+
+# Kolejność jak w historycznym scan_file: emdash → emoji → bold → svo → connector.
+DETECTOR_REGISTRY: List[Tuple[str, "callable"]] = [
+    ("emdash-overuse", _proc_emdash),
+    ("emoji-in-heading", _proc_emoji_heading),
+    ("bold-overload", _proc_bold),
+    ("svo-rhythm", _proc_svo),
+    ("connector-overload", _proc_connector),
+]
+
+
+def run_procedural_detector(detector_id: str, text: str, eff_lang: str) -> List[Tuple[int, str, str, str]]:
+    """Uruchamia pojedynczy detektor proceduralny PO IDENTYFIKATORZE (detector_id z rejestru).
+
+    Zwraca listę krotek (line, mid, klasa, fragment) zgodnie z kontraktem adaptera.
+    Nieznany detector_id → KeyError (świadoma, głośna awaria — literówka w id nie ma się prześliznąć).
+    """
+    for did, adapter in DETECTOR_REGISTRY:
+        if did == detector_id:
+            return adapter(text, eff_lang)
+    raise KeyError(f"Nieznany detektor proceduralny: {detector_id!r}")
+
+
 def scan_file(filepath: str, compiled_markers, lang_filter: str) -> Tuple[List[Hit], FileSummary]:
     """Skanuje jeden plik. Zwraca (hits, summary)."""
     try:
@@ -327,34 +400,15 @@ def scan_file(filepath: str, compiled_markers, lang_filter: str) -> Tuple[List[H
         if cnt > emdash_max:
             emdash_max = cnt
 
-    # --- Specjalna logika em-dash (block po progu ≥3) ---
-    # Dla EN: EN-DASH, dla PL/both: PL-TYPO
+    # --- Detektory PROCEDURALNE (wołane po identyfikatorze z DETECTOR_REGISTRY) ---
+    # Dla EN: EN-DASH em-dash, dla PL/both: PL-TYPO. Próg/logika żyją w funkcjach detect_*;
+    # tutaj tylko iterujemy rejestr w ustalonej kolejności i mapujemy klasę → blockers.
     eff_lang = lang_filter if lang_filter != "both" else "pl"  # domyślnie PL dla both
-    # Sprawdź rozszerzenie lub treść — jeśli plik nie ma słów PL, traktuj jako EN
-    # Uproszczenie: opieramy się na lang_filter
-    for (dl, dmid, dfrag) in detect_emdash_overuse(text, eff_lang):
-        hits.append(Hit(filepath, dl, dmid, "block", dfrag))
-        blockers += 1
-
-    # --- Emoji w nagłówkach (block) ---
-    for (el, efrag) in detect_emoji_in_headings(text):
-        hits.append(Hit(filepath, el, "PL-TYPO", "block", efrag))
-        blockers += 1
-
-    # --- Bold-overload (review, nie bloker) ---
-    for (bl, bmid, bfrag) in detect_bold_overload(text, eff_lang):
-        hits.append(Hit(filepath, bl, bmid, "review", bfrag))
-        # review — nie dodaje do blockers
-
-    # --- SVO rhythm (review) ---
-    for (sl, sfrag) in detect_svo_rhythm(text):
-        hits.append(Hit(filepath, sl, "PL-RHYTHM", "review", sfrag))
-
-    # --- Nawał łączników-otwarć (block jeśli ≥3) ---
-    connector_hits = detect_connector_overload(text)
-    for (cl, cfrag) in connector_hits:
-        hits.append(Hit(filepath, cl, "PL-RHYTHM", "block", cfrag))
-        blockers += 1
+    for detector_id, _adapter in DETECTOR_REGISTRY:
+        for (pline, pmid, pklasa, pfrag) in run_procedural_detector(detector_id, text, eff_lang):
+            hits.append(Hit(filepath, pline, pmid, pklasa, pfrag))
+            if pklasa == "block":
+                blockers += 1
 
     # --- Antyteza redefinicyjna PL (block przy współwystąpieniu z innym markerem w akapicie) ---
     # Zbierz trafienia antytezy redefinicyjnej
