@@ -1,0 +1,23 @@
+tests/antithesis_eval.md
+  s_b1f4aea171d2c2::t_791a32c0bc1a9d 16-21
+  s_b1f4aea171d2c2::t_386d5f1ea946fe 41-45,47-49
+  s_b1f4aea171d2c2::t_8ee30f82bde958 59
+rules.json
+  s_b1f4aea171d2c2::t_86cc173fad32cd 216-217
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "ab0b114188bb30a23cdfbef1e4493fda387946be",
+  "prompts": {},
+  "sessions": {
+    "s_b1f4aea171d2c2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "adfe49fb-2db9-454f-8881-22f8870c2ccc",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "<eryk@talentcanvas.tech>"
+    }
+  }
+}
