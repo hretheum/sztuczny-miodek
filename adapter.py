@@ -319,17 +319,15 @@ def strip_code_spans(text: str) -> str:
     # 1) bloki ogrodzone — pary kolejnych ogrodzeń tego samego typu
     fences = list(_FENCE_RE.finditer(text))
     i = 0
-    consumed_until = 0
     while i < len(fences):
         open_m = fences[i]
         # znajdź ogrodzenie zamykające (kolejne), inaczej do końca tekstu
         close_m = fences[i + 1] if i + 1 < len(fences) else None
         block_start = open_m.start()
-        block_end = (close_m.end()) if close_m else len(text)
+        block_end = close_m.end() if close_m else len(text)
         for j in range(block_start, block_end):
             if text[j] != "\n":
                 out[j] = " "
-        consumed_until = block_end
         i += 2  # przeskocz parę (otwarcie+zamknięcie)
     stripped = "".join(out)
     # 2) kod inline — tylko poza już wyzerowanymi obszarami (działa, bo tam nie ma już backticków)

@@ -122,6 +122,12 @@ kodzie) wyjście bajt-w-bajt identyczne vs przed wpięciem (6/6 kombinacji) — 
 `` `fix/db-pool` `` (1 myślnik < próg 3), więc werdykt PASS bez zmian. Regresję chroni
 `tools/measure_markdown.py` (gate w `run_tests.sh`).
 
+**Znane ograniczenie:** wyzerowanie kodu dotyczy detektorów PROCEDURALNYCH (em-dash, bold, SVO,
+connector, emoji). Markery DEKLARATYWNE (triada/antyteza/signpost) skanują oryginalny tekst, więc
+taki marker wewnątrz bloku kodu wciąż może dać trafienie klasy `review` — fałszywy hint, który NIE
+zmienia werdyktu (review nie liczy się do blokerów). To zachowanie 1:1 sprzed C3 (nie regresja);
+pełne odsianie kodu również dla markerów deklaratywnych to domena Stage 2 (osąd LLM).
+
 ## Plan wdrożenia (kolejne zadania Epiku C)
 
 - **C4** — adapter formatu strukturalnego (opcjonalny).

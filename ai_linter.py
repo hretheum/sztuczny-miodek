@@ -447,7 +447,11 @@ def scan_file(filepath: str, compiled_markers, lang_filter: str) -> Tuple[List[H
     redef_patterns = [m for m in compiled_markers if m[0] == "PL-RHET" and m[2] == "block"]
 
     # --- Główna pętla regex po liniach ---
-    # Dla PL-RHET block: tymczasowo jako review, potem sprawdzimy współwystąpienie
+    # Dla PL-RHET block: tymczasowo jako review, potem sprawdzimy współwystąpienie.
+    # ZNANE OGRANICZENIE (C3): markery DEKLARATYWNE skanują ORYGINALNY `text`, nie `prose_text`
+    # z wyzerowanym kodem. Marker (triada/antyteza/signpost) w bloku kodu może więc dać trafienie
+    # klasy review — fałszywy HINT, ale NIE zmienia werdyktu (review nie liczy się do blockers).
+    # To zachowanie 1:1 sprzed C3 (nie regresja); pełne odsianie kodu dla markerów = domena Stage 2.
     for mid, mlang, mclass, cre, desc in compiled_markers:
         # Pomiń markery block PL-RHET (obsługiwane osobno)
         if mid == "PL-RHET" and mclass == "block":
