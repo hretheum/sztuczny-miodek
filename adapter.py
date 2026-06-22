@@ -201,22 +201,68 @@ def split_paragraphs_faithful(text: str) -> List[Segment]:
 # (zakłada 1-znakowy separator → rozjazd przy „?!"/„..."). Tu offset KAŻDEGO zdania liczony WPROST.
 _SENT_SEP_RE = _re.compile(r"[.!?]+")
 
+# Skróty, po których kropka NIE kończy zdania (segmenter regułowy, bez parsera — „na ile rozsądne").
+# Lista typowych polskich/uniwersalnych skrótów; rozszerzalna. Nieznany skrót → zachowanie domyślne.
+_ABBREVIATIONS = frozenset({
+    "np", "itd", "itp", "tj", "tzn", "tzw", "min", "dr", "prof", "inż", "mgr",
+    "płk", "gen", "ul", "al", "nr", "str", "godz", "cdn", "ww", "śp", "św",
+    "pl", "ang", "łac", "por", "zob", "wg", "ok", "tel", "ds", "im",
+})
+
+_TOKEN_RE = _re.compile(r"[\wąćęłńóśźżĄĆĘŁŃÓŚŹŻ]+", _re.UNICODE)
+
+
+def _is_false_sentence_boundary(left: str, sep: str, right: str) -> bool:
+    """Czy kropka to FAŁSZYWA granica zdania (skrót / inicjał / liczba / kontynuacja małą literą).
+
+    `left` = tekst zdania przed separatorem, `sep` = separator („.", „?!", …), `right` = tekst po nim.
+    Tylko pojedyncza kropka bywa fałszywa; „?!"/„..." traktujemy jako realny koniec."""
+    toks = _TOKEN_RE.findall(left)
+    last = toks[-1].lower() if toks else ""
+    if last in _ABBREVIATIONS:
+        return True
+    if len(last) == 1 and last.isalpha():        # inicjał „A."
+        return True
+    if last.isdigit():                            # liczba „15."
+        return True
+    rs = right.lstrip()
+    if sep == "." and rs and not rs[0].isupper():  # kontynuacja zdania małą literą
+        return True
+    return False
+
 
 def split_sentences_faithful(text: str) -> List[Segment]:
     """Wierny podział na zdania: każdy `Segment` zna dokładny [start, end) i numer linii.
 
-    Niezmiennik: `text[seg.start:seg.end] == seg.text`. Granice zdań identyczne jak historyczny
-    `re.split(r"[.!?]+", text)` (fragmenty MIĘDZY separatorami, włącznie z pustymi na brzegach),
-    ale offset jest wyznaczony przez `finditer` — poprawny też dla wieloznakowych separatorów
-    („?!", „...") tam, gdzie stare `pos += len(sent)+1` się rozjeżdżało. `text` segmentu to surowy
-    wycinek (bez `.strip()`), by zachować zgodność pozycji z konsumentem (detect_svo_rhythm)."""
-    segments: List[Segment] = []
-    starts_ends: List[Tuple[int, int]] = []
+    Niezmiennik: `text[seg.start:seg.end] == seg.text`. Offset wyznaczony przez `finditer` —
+    poprawny też dla wieloznakowych separatorów („?!", „...") tam, gdzie stare `pos += len(sent)+1`
+    się rozjeżdżało. `text` segmentu to surowy wycinek (bez `.strip()`).
+
+    Segmenter regułowy (C2): kropka po znanym SKRÓCIE („np.", „dr."), INICJALE („A.") lub LICZBIE
+    („15.") oraz kropka przed kontynuacją małą literą NIE kończy zdania — sąsiednie fragmenty są
+    scalane (start scalonego = start pierwszego → wierność offsetu zachowana). To „na ile rozsądne
+    bez parsera"; nieznany skrót spoza listy domyślnie kończy zdanie."""
+    # 1) surowe granice z finditer
+    raw: List[Tuple[int, int, str, int]] = []  # (start_frag, end_frag, separator, end_sep)
     pos = 0
     for m in _SENT_SEP_RE.finditer(text):
-        starts_ends.append((pos, m.start()))
+        raw.append((pos, m.start(), m.group(0), m.end()))
         pos = m.end()
-    starts_ends.append((pos, len(text)))
+    raw.append((pos, len(text), "", len(text)))
+
+    # 2) scal fałszywe granice
+    starts_ends: List[Tuple[int, int]] = []
+    seg_start = raw[0][0] if raw else 0
+    for (fs, fe, sep, se) in raw:
+        if sep == "":
+            starts_ends.append((seg_start, fe))
+            break
+        if _is_false_sentence_boundary(text[seg_start:fe], sep, text[se:se + 30]):
+            continue  # nie tnij — zdanie rozciąga się do następnej granicy
+        starts_ends.append((seg_start, fe))
+        seg_start = se
+
+    segments: List[Segment] = []
     for start, end in starts_ends:
         line = text.count("\n", 0, start) + 1
         segments.append(Segment("sentence", text[start:end], start, end, line=line))

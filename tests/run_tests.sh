@@ -49,6 +49,13 @@ else
   echo "FAIL recall antytezy — zawężenie wzorca przeoczyło generatorową antytezę (patrz wyżej)"; fail=1
 fi
 
+echo "== Segmenter zdań: skróty/inicjały/separatory na tests/sentence_eval.md (C2) =="
+if python3 "$DIR/../tools/measure_sentences.py"; then
+  : # OK — komunikat wypisuje sam skrypt
+else
+  echo "FAIL segmenter zdań — podział zdań rozjechał się (patrz wyżej)"; fail=1
+fi
+
 if [[ $fail -eq 0 ]]; then
   echo "WSZYSTKIE TESTY PRZESZŁY."
 else

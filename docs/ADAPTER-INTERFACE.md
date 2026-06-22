@@ -74,6 +74,13 @@ zdania wyznaczony przez `finditer` po separatorach `[.!?]+`, zamiast historyczne
 `pos += len(sent) + 1`. Niezmiennik `text[s.start:s.end] == s.text`; `text` segmentu to surowy
 wycinek (bez `.strip()`), by pozycja zgadzała się z konsumentem.
 
+**Segmenter regułowy (skróty/inicjały/liczby):** kropka po znanym skrócie (`_ABBREVIATIONS`:
+`np.`, `dr.`, `itd.`, `ok.`, `godz.` …), po inicjale (`A.`), po liczbie (`15.`) lub przed
+kontynuacją małą literą NIE kończy zdania — sąsiednie fragmenty są scalane (start scalonego =
+start pierwszego, więc wierność offsetu zachowana). „?!"/„..." traktowane jako realny koniec.
+To podejście „na ile rozsądne bez parsera"; skrót spoza listy domyślnie kończy zdanie. Regresję
+chroni zestaw `tests/sentence_eval.md` + gate `tools/measure_sentences.py` w `run_tests.sh`.
+
 **Wpięcie:** `detect_svo_rhythm` używa teraz `adapter.split_sentences_faithful` zamiast
 `re.split(r"[.!?]+")` + ręcznego liczenia `pos`. Logika detekcji (3 zdania z tym samym tokenem
 otwierającym, ≥3 znaki) bez zmian. Granice zdań i pozycje identyczne jak historyczny `re.split`
