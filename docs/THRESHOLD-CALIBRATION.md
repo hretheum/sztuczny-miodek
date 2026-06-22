@@ -55,6 +55,28 @@ Korpus testowy (5 plików, 59 zasianych tellów) jest jednak za mały do *precyz
 progów — daje sygnał binarny (łapie/nie łapie), nie rozkład wartości. Pełna kalibracja wymaga
 korpusu produkcyjnego i logu decyzji (część 2).
 
+### Próg serii PL-ANTI ≥3 w świetle B2 (ryzyko fałszywego bloku)
+
+B2 (KAN-187) wykazał, że forma B PL-ANTI („X to Y, nie Z") strukturalnie łapie też **korekty
+faktualne** z rzeczownikiem pospolitym („Piotr to kierownik, nie pracownik") — nieusuwalne bez
+analizy części mowy. Próg serii PL-ANTI ≥3 eskaluje do `block`, więc 3 takie FP w jednym pliku
+dałyby fałszywy blok. Czy próg jest dobrze dobrany?
+
+Ocena — **próg ≥3 zostaje, jest właściwie dobrany**, z uzasadnieniem:
+- Jest **konserwatywny z założenia**: wyższy niż EN-ANTI ≥2 dokładnie dlatego, że polskie „nie"/
+  „a nie"/„to … nie" są częstsze w naturalnej prozie, więc pojedyncze trafienie nie blokuje.
+- Pojedyncza korekta faktualna jest tania (klasa `review`); fałszywy **blok** wymaga **trzech**
+  korekt faktualnych formy „X to Y, nie Z" w jednym pliku — to konstrukcja na tyle nietypowa, że
+  jej trzykrotne nagromadzenie samo w sobie jest sygnałem (albo realnej maniery, albo tekstu
+  wartego przeglądu). Filtr dni/liczb z B2 dodatkowo odsiewa najczęstsze korekty faktualne.
+- Brak danych korpusowych (0 trafień PL-ANTI w 5 plikach) — obniżenie progu byłoby zgadywaniem,
+  a podniesienie (≥4) osłabiłoby recall serii bez dowodu, że ≥3 daje FP.
+
+**Wniosek:** próg ≥3 jest najlepszym dostępnym kompromisem; ryzyko fałszywego bloku jest realne,
+ale niskie i ograniczone filtrem B2. Docelowa weryfikacja: gdy log decyzji (D4) pokaże realne
+serie PL-ANTI, policzyć udział korekt faktualnych w trafieniach serii i — jeśli >akceptowalny —
+rozważyć podniesienie progu serii lub osłabienie eskalacji do `review`. Do tego czasu: bez zmian.
+
 ---
 
 ## 2. Metodyka kalibracji na korpusie + logu (na przyszłość)
@@ -89,9 +111,18 @@ Przed zmianą progu: zmierz na GROUND_TRUTH + baseline/control oraz zestawach ev
 Każdą zmianę progu opisz: stara→nowa wartość, dane uzasadniające (precyzja/recall przed/po),
 liczba decyzji w próbce. Brak wystarczającej próbki (np. <30 decyzji dla reguły) = NIE zmieniaj.
 
-### Gdzie progi „mieszkają"
+### Gdzie progi „mieszkają" — styk z D1 (konfiguracja)
 Obecnie progi proceduralne są stałymi w kodzie (`ai_linter.py`), bo to algorytmy z progiem, nie
-czyste wzorce (patrz kontrakt detektorów proceduralnych w `manieryzm-ai.md`). Gdyby kalibracja
-miała być częsta, rozważ wyniesienie progów do `rules.json` (pole `prog`, już przewidziane w
-schemacie `rules.schema.md`) — wtedy zmiana progu = edycja danych, nie kodu. Na teraz progi są
-stabilne, więc pozostają w kodzie (brak powodu do przedwczesnej parametryzacji).
+czyste wzorce (patrz kontrakt detektorów proceduralnych w `manieryzm-ai.md`). Schemat danych
+(`rules.schema.md`) **już przewiduje pole `prog`** (z A1) — wyniesienie progów do `rules.json`
+uczyniłoby zmianę progu edycją danych, nie kodu.
+
+**Styk z D1 (NIE dubluję — notka):** wyniesienie progów do konfiguracji to naturalnie zakres D1
+(parametryzacja/konfiguracja narzędzia), nie B3. B3 świadomie NIE wynosi progów — to byłaby
+przedwczesna parametryzacja bez potrzeby (progi są dziś stabilne i adekwatne). Gdy D1 zdefiniuje
+warstwę konfiguracji, kalibracja z części 2 powinna zapisywać wyniki do tej warstwy (pole `prog`
+per reguła w `rules.json` lub osobny plik configu), a nie do literałów w kodzie. Rekomendacja dla
+D1: jeśli wprowadza konfigurację, niech obejmie progi proceduralne (`emdash≥3`, `bold≥4`,
+`connector≥3`, `EN-ANTI≥2`, `PL-ANTI≥3`, `gęstość>8`) jako parametry — wtedy B3-metodyka stanie
+się w pełni wykonalna bez zmian w kodzie. Do czasu D1 progi pozostają w kodzie (brak powodu do
+przedwczesnej parametryzacji, brak danych do kalibracji).
