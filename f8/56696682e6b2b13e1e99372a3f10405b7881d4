@@ -1,0 +1,27 @@
+adapter.py
+  s_b1f4aea171d2c2::t_290ba531756cec 294-367
+tools/measure_markdown.py
+  s_b1f4aea171d2c2::t_04d6e6ed0d7f27 1-94
+docs/ADAPTER-INTERFACE.md
+  s_b1f4aea171d2c2::t_71d2613456207c 94-111,116-117
+tests/run_tests.sh
+  s_b1f4aea171d2c2::t_c20d2f75943f2e 59-65
+ai_linter.py
+  s_b1f4aea171d2c2::t_7cd7acf62e2947 423-426,429
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "f856696682e6b2b13e1e99372a3f10405b7881d4",
+  "prompts": {},
+  "sessions": {
+    "s_b1f4aea171d2c2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "adfe49fb-2db9-454f-8881-22f8870c2ccc",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "<eryk@talentcanvas.tech>"
+    }
+  }
+}
