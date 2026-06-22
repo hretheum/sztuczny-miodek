@@ -253,7 +253,7 @@ plik | słowa | trafienia | em-dash/akapit(max) | gęstość/500 | blokery | WER
 
 ## Katalog reguł (auto-generowany z rules.json)
 
-<!-- BEGIN:auto-katalog-regul -->
+<!-- RULES:START -->
 Sekcja wygenerowana automatycznie z `rules.json` przez `tools/gen_doc_catalog.py` — nie edytuj ręcznie. Liczba reguł regexowych: 47 w 13 kategoriach.
 
 ### PL-SIGN — PL — klasa: review
@@ -367,7 +367,7 @@ Sekcja wygenerowana automatycznie z `rules.json` przez `tools/gen_doc_catalog.py
 | Opis | Wzorzec (regex) |
 |---|---|
 | signpost zamknięcia EN | `\b(?:in conclusion\|overall\|ultimately\|all in all\|in summary\|to sum up\|in essence\|when all is said)\b` |
-<!-- END:auto-katalog-regul -->
+<!-- RULES:END -->
 
 ---
 

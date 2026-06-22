@@ -8,7 +8,7 @@ z samych reguł. Driftem, który tu likwidujemy, są listy „Wzorce techniczne"
 po sekcjach i przepisywane ręcznie — rozjeżdżały się z faktyczną zawartością lintera.
 
 Rozwiązanie: jedna AUTO-GENEROWANA sekcja katalogu, wstrzykiwana między znaczniki
-  <!-- BEGIN:auto-katalog-regul --> ... <!-- END:auto-katalog-regul -->
+  <!-- RULES:START --> ... <!-- RULES:END -->
 Sekcja powstaje WYŁĄCZNIE z rules.json (jedno źródło prawdy reguł regexowych), więc nigdy się
 nie rozjedzie. Reszta dokumentu pozostaje nietknięta. Skrypt jest bezpieczny do wielokrotnego
 uruchomienia (zawsze ten sam wynik, podmienia treść między znacznikami — nie dokleja duplikatów).
@@ -34,8 +34,8 @@ REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RULES_PATH = os.path.join(REPO_ROOT, "rules.json")
 DOC_PATH = os.path.join(REPO_ROOT, "manieryzm-ai.md")
 
-BEGIN_MARK = "<!-- BEGIN:auto-katalog-regul -->"
-END_MARK = "<!-- END:auto-katalog-regul -->"
+BEGIN_MARK = "<!-- RULES:START -->"
+END_MARK = "<!-- RULES:END -->"
 
 LANG_LABEL = {"pl": "PL", "en": "EN", "both": "PL+EN"}
 
