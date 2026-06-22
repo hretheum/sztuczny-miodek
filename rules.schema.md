@@ -20,7 +20,7 @@ Pola **obowiązkowe** (odpowiadają pięciu polom dawnej krotki `MARKER_DEFS`):
 | `id`      | string | np. `PL-SIGN`, `EN-TRIAD` | Identyfikator kategorii markera. Lustro kategorii z `manieryzm-ai.md`. Może się powtarzać między wpisami. |
 | `lang`    | string | `pl` \| `en` \| `both`    | Warstwa językowa. Filtr `--lang` wybiera wpisy, gdzie `lang` pasuje lub jest `both`. |
 | `klasa`   | string | `block` \| `review`       | Waga markera: `block` = werdykt FAIL (blokuje), `review` = do przeglądu (nie blokuje sam z siebie). |
-| `pattern` | string | dowolny regex Pythona     | Wzorzec wyrażenia regularnego. Kompilowany z flagami `re.IGNORECASE | re.UNICODE`. Escaping zapisany w składni JSON (np. `\\b` to `\b` regexa). |
+| `pattern` | string | dowolny regex Pythona     | Wzorzec wyrażenia regularnego. Kompilowany z flagami `re.IGNORECASE | re.UNICODE`. Escaping zapisany w składni JSON (np. `\\b` to `\b` regexa). Pole `pattern` może zawierać inline flagi modułu `re` (np. `(?m)`, `(?s)`) jako część składni wzorca — `(?m)` jest realnie używany w regule PL-TYPO. |
 | `opis`    | string | dowolny tekst             | Krótki, ludzki opis tego, co marker wykrywa. |
 
 Pola **opcjonalne** (przewidziane na przyszłą rozbudowę — A5 i rozszerzanie katalogu;
