@@ -346,7 +346,7 @@ Sekcja wygenerowana automatycznie z `rules.json` przez `tools/gen_doc_catalog.py
 | Opis | Wzorzec (regex) |
 |---|---|
 | antyteza: X, a nie Y | `,\s+a nie\b` |
-| antyteza inwersyjna: ..., nie Y (domknięcie) | `,\s+nie\s+\w+(?:\s+\w+)?(?=[.!?;\n]\|$)` |
+| antyteza inwersyjna: To X, nie Y (rama definicyjna; zawężona vs naturalne korekty — nie łapie „herbatę, nie kawę") | `(?:(?<=^)\|(?<=[.!?;:\n]))\s*to (?:jest \|są )?[^.,;!?\n]{2,40}?,\s+nie\s+(?-i:[a-ząćęłńóśźż]{3,})(?:\s+\w+)?(?=[.!?;\n]\|$)` |
 
 ### PL-HEDGE — PL — klasa: review
 

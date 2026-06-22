@@ -206,8 +206,8 @@
     "id": "PL-ANTI",
     "lang": "pl",
     "klasa": "review",
-    "pattern": ",\\s+nie\\s+\\w+(?:\\s+\\w+)?(?=[.!?;\\n]|$)",
-    "opis": "antyteza inwersyjna: ..., nie Y (domknięcie)"
+    "pattern": "(?:(?<=^)|(?<=[.!?;:\\n]))\\s*to (?:jest |są )?[^.,;!?\\n]{2,40}?,\\s+nie\\s+(?-i:[a-ząćęłńóśźż]{3,})(?:\\s+\\w+)?(?=[.!?;\\n]|$)",
+    "opis": "antyteza inwersyjna: To X, nie Y (rama definicyjna; zawężona vs naturalne korekty — nie łapie „herbatę, nie kawę\")"
   },
   {
     "id": "PL-HEDGE",

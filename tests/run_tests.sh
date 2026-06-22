@@ -42,6 +42,13 @@ else
   echo "FAIL recall triady — zawężenie wzorca przeoczyło realną triadę (patrz wyżej)"; fail=1
 fi
 
+echo "== Recall antytezy: PL-ANTI na tests/antithesis_eval.md (B2) =="
+if python3 "$DIR/../tools/measure_antithesis.py" --min-recall 1.0; then
+  : # OK — komunikat wypisuje sam skrypt
+else
+  echo "FAIL recall antytezy — zawężenie wzorca przeoczyło generatorową antytezę (patrz wyżej)"; fail=1
+fi
+
 if [[ $fail -eq 0 ]]; then
   echo "WSZYSTKIE TESTY PRZESZŁY."
 else
