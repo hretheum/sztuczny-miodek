@@ -1,0 +1,23 @@
+manieryzm-ai.md
+  s_b1f4aea171d2c2::t_60de1268f8eec5 256
+  s_b1f4aea171d2c2::t_fd721d595a6684 370
+tools/gen_doc_catalog.py
+  s_b1f4aea171d2c2::t_f260037dc1ad40 11
+  s_b1f4aea171d2c2::t_55eee80d8a4ddd 37-38
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "6a43c74b3ed21bcf7cda00410d31764bf1a5656d",
+  "prompts": {},
+  "sessions": {
+    "s_b1f4aea171d2c2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "adfe49fb-2db9-454f-8881-22f8870c2ccc",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "<eryk@talentcanvas.tech>"
+    }
+  }
+}
