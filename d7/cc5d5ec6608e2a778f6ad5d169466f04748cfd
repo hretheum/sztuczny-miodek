@@ -1,0 +1,21 @@
+tools/gen_rules_json.py
+  s_b1f4aea171d2c2::t_aa83e7370a537e 1-83
+rules.schema.md
+  s_b1f4aea171d2c2::t_f52eca213d6494 1-50
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "d7cc5d5ec6608e2a778f6ad5d169466f04748cfd",
+  "prompts": {},
+  "sessions": {
+    "s_b1f4aea171d2c2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "adfe49fb-2db9-454f-8881-22f8870c2ccc",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "<eryk@talentcanvas.tech>"
+    }
+  }
+}
