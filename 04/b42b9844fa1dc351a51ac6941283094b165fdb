@@ -1,0 +1,36 @@
+ai_linter.py
+  s_b1f4aea171d2c2::t_762770eeabef39 528
+  s_b1f4aea171d2c2::t_1fa6baf69408c1 273
+  s_b1f4aea171d2c2::t_49c45fde95c35f 514
+  s_b1f4aea171d2c2::t_c286aa67c687bc 649-653,656-663
+  s_b1f4aea171d2c2::t_8760fbf399a259 31-35
+  s_b1f4aea171d2c2::t_cde5b18e2cdb4e 241
+  s_b1f4aea171d2c2::t_7e7b83d2781d5a 308
+  s_b1f4aea171d2c2::t_8851b5b9762445 504
+config.json
+  s_b1f4aea171d2c2::t_40da95cf8d3d50 1-39
+config.schema.md
+  s_b1f4aea171d2c2::t_9b76dc7b919e4c 1-58
+tools/check_config.py
+  s_b1f4aea171d2c2::t_12b7a2ada75035 1-64
+tests/run_tests.sh
+  s_b1f4aea171d2c2::t_bb33cfd6ea000f 38-44
+config.py
+  s_b1f4aea171d2c2::t_0d5d74ac8b9b14 1-93
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "04b42b9844fa1dc351a51ac6941283094b165fdb",
+  "prompts": {},
+  "sessions": {
+    "s_b1f4aea171d2c2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "adfe49fb-2db9-454f-8881-22f8870c2ccc",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "<eryk@talentcanvas.tech>"
+    }
+  }
+}
