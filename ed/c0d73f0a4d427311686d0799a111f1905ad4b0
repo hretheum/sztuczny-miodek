@@ -1,0 +1,23 @@
+tests/run_tests.sh
+  s_b1f4aea171d2c2::t_442da8374ab6e4 31-37
+ai_linter.py
+  s_b1f4aea171d2c2::t_95237866cb2167 366-371
+tools/check_id_consistency.py
+  s_b1f4aea171d2c2::t_6d4b48b78f9b55 1-116
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "edc0d73f0a4d427311686d0799a111f1905ad4b0",
+  "prompts": {},
+  "sessions": {
+    "s_b1f4aea171d2c2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "adfe49fb-2db9-454f-8881-22f8870c2ccc",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "<eryk@talentcanvas.tech>"
+    }
+  }
+}
