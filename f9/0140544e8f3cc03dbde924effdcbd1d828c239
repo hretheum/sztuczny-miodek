@@ -1,0 +1,26 @@
+tools/measure_antithesis.py
+  s_b1f4aea171d2c2::t_e334bff54b4be1 61-63,71,77-81,86-89,100-102
+  s_b1f4aea171d2c2::t_84e253a04f30c2 98
+  s_b1f4aea171d2c2::t_ddef46c9d83bab 47
+  s_b1f4aea171d2c2::t_e8cb8572a3da20 99
+tests/antithesis_eval.md
+  s_b1f4aea171d2c2::t_3b12995eb00ece 3-10,12-14,16,30-34,45-47
+rules.json
+  s_b1f4aea171d2c2::t_9917c334917e6d 210-217
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "f90140544e8f3cc03dbde924effdcbd1d828c239",
+  "prompts": {},
+  "sessions": {
+    "s_b1f4aea171d2c2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "adfe49fb-2db9-454f-8881-22f8870c2ccc",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "<eryk@talentcanvas.tech>"
+    }
+  }
+}
