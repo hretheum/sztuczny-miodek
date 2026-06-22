@@ -260,6 +260,7 @@ Kategorie kanonu (te same ID w dok i linterze):
 | PL-SIGN | PL | puste otwarcia/signposty („Warto podkreślić", „W dzisiejszych czasach", „Zanurzmy się") |
 | PL-CLICHE | PL | frazy-wytrychy („odgrywa kluczową rolę", „rewolucyjny", „stanowi integralną część") |
 | PL-RHET | PL | antyteza redefinicyjna „to nie X — to Y", paralelizm „nie tylko… ale również", triady, „z jednej… z drugiej strony" |
+| PL-ANTI | PL | antyteza przeciwstawna bez myślnika: „X, a nie Y" / inwersja „Y, nie X" (generatorowe domknięcie); seria ≥3 = block |
 | PL-RHYTHM | PL | monotonny szyk SVO, nawał łączników-otwarć („Ponadto/Co więcej/Dodatkowo") |
 | PL-HEDGE | PL | hedging („mogłoby potencjalnie", „warto byłoby rozważyć") |
 | PL-TYPO | PL | nadużycie myślnika, emoji w nagłówkach, bold-overload, nagłówki-klisze |
@@ -344,7 +345,8 @@ Werdykt **FAIL**, gdy zachodzi którykolwiek warunek:
 - **FAIL-HARD**: jakakolwiek cyrylica `[А-Яа-яЁё]` w tekście PL.
 - Marker klasy `block` po przekroczeniu progu: akapit z em-dash ≥3; emoji w linii nagłówka;
   antyteza redefinicyjna PL współwystępująca z ≥1 innym markerem w tym samym akapicie; seria
-  antytez EN; ≥3 łączniki-otwarcia w pliku (PL-RHYTHM).
+  antytez EN; **seria PL-ANTI ≥3 w pliku** (antyteza „X, a nie Y" / „Y, nie X" rozsiana po akapitach);
+  ≥3 łączniki-otwarcia w pliku (PL-RHYTHM).
 - Gęstość ważona > progu: trafienia / (słowa / 500) > **8**.
 - Po korekcie został choć jeden nierozwiązany flag.
 
@@ -658,7 +660,7 @@ Liczba błędów: 25 | Krytycznych: 1 (cyrylica) | Kolokacje: 3 | Interpunkcja: 
 - [ ] Skanowanie hybryd angielsko-polskich (ang. rdzeń + pol. deklinacja)
 - [ ] **Skanowanie interpunkcji** (przecinki przed który/że/żeby/gdy, „to, co")
 - [ ] **Weryfikacja kolokacji** (każda zamiana anglicyzmu → sprawdź naturalność frazy)
-- [ ] **Manieryzm AI — warstwa PL** (PL-SIGN signposty, PL-CLICHE wytrychy, PL-RHET triady/paralelizm/antyteza, PL-RHYTHM rytm, PL-HEDGE, PL-TYPO myślniki/emoji) — wg `manieryzm-ai.md`
+- [ ] **Manieryzm AI — warstwa PL** (PL-SIGN signposty, PL-CLICHE wytrychy, PL-RHET triady/paralelizm/antyteza redefinicyjna, PL-ANTI antyteza przeciwstawna „X, a nie Y", PL-RHYTHM rytm, PL-HEDGE, PL-TYPO myślniki/emoji) — wg `manieryzm-ai.md`
 - [ ] **Manieryzm AI — warstwa EN** (EN-DASH, EN-ANTI, EN-TRIAD, EN-PARA, EN-CLICHE, EN-HEDGE, EN-SUPER, EN-CONCL) dla tekstów angielskich
 - [ ] Analiza gramatyki (strona bierna, imiesłowy, nominalizacje, zawieszony przysłówek, powtórzenia)
 - [ ] Sprawdzenie aspektu czasowników (dokonany vs niedokonany)

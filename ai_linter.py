@@ -118,6 +118,18 @@ MARKER_DEFS: List[Tuple[str, str, str, str, str]] = [
      r"\bod \w+(?:y|ów|i)? (?:po|aż po) \w+",
      "rozpiętość: od X po Y"),
 
+    # PL-ANTI — antyteza przeciwstawna NIEreferencyjna (bez myślnika, bez "to ... to")
+    # generatorowe domknięcie retoryczne: "X, a nie Y" / inwersja "Y, nie X".
+    # Każde z osobna bywa poprawne w swobodnej mowie → klasa review (high recall);
+    # nagromadzenie ≥3 w pliku eskaluje do block (patrz "PL-ANTI seria" niżej).
+    # Symetryczne do EN-ANTI. Bliźniak redefinicyjnej PL-RHET, której brakowało wariantu bez myślnika.
+    ("PL-ANTI", "pl", "review",
+     r",\s+a nie\b",
+     "antyteza: X, a nie Y"),
+    ("PL-ANTI", "pl", "review",
+     r",\s+nie\s+\w+(?:\s+\w+)?(?=[.!?;\n]|$)",
+     "antyteza inwersyjna: ..., nie Y (domknięcie)"),
+
     # PL-HEDGE — hedging / nadmierna grzeczność
     ("PL-HEDGE", "pl", "review",
      r"\b(?:mogłoby|mógłby|można by|dałoby się)\b.{0,30}\b(?:potencjalnie|ewentualnie|w pewnym sensie)\b",
@@ -521,6 +533,16 @@ def scan_file(filepath: str, compiled_markers, lang_filter: str) -> Tuple[List[H
     if en_anti_count >= 2:
         for h in hits:
             if h.mid == "EN-ANTI" and h.klasa == "review":
+                h.klasa = "block"
+                blockers += 1
+
+    # --- PL-ANTI seria: block jeśli ≥3 trafień w pliku (rozproszona maniera antytezy) ---
+    # Próg 3 (nie 2 jak EN), bo ", nie"/"a nie" częstsze naturalnie w polszczyźnie.
+    # Łapie przypadek, gdy pojedyncze antytezy są OK, ale ich nawał po akapitach brzmi generatorowo.
+    pl_anti_count = sum(1 for h in hits if h.mid == "PL-ANTI")
+    if pl_anti_count >= 3:
+        for h in hits:
+            if h.mid == "PL-ANTI" and h.klasa == "review":
                 h.klasa = "block"
                 blockers += 1
 

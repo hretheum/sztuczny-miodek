@@ -63,6 +63,21 @@ Okleiny o wysokiej częstotliwości w prozie AI; zwłaszcza sugerujące wagę lu
 
 ---
 
+### PL-ANTI — antyteza przeciwstawna NIEreferencyjna (klasa: review; block przy serii ≥3)
+
+Bliźniak PL-RHET, którego brakowało: ta sama figura przeciwstawienia, ale **bez myślnika i bez „to … to"**. Najczęściej przeoczana, bo każde zdanie z osobna brzmi naturalnie w mowie. Maniera ujawnia się dopiero w nagromadzeniu — gdy niemal każdy akapit domyka się rytmem „robię X, a nie Y". Symetryczna do EN-ANTI.
+
+| Figura | Przykład (błędny) | Dlaczego to AI-tell | Poprawka | Próg/klasa |
+|---|---|---|---|---|
+| „X, a nie Y" | „To opis mojego dnia, a nie ogłoszenie." | Domknięcie przez kontrast — generator lubi przeciwstawić, żeby brzmieć dobitnie. | Zdanie twierdzące: „To opis mojego dnia." | review; block w serii ≥3/plik |
+| Inwersja „Y, nie X" | „To zasada operacyjna, nie hasło." | Ta sama figura odwrócona; sufiksowe „nie X" jako pseudo-pointa. | „Tę zasadę stosuję na co dzień." | review; block w serii ≥3/plik |
+
+**Uwaga na granicę z interpunkcją:** wyliczenie z zaprzeczeniem („transceiver, nie źródło") bywa *poprawne* i jest osobną kwestią (przecinek). PL-ANTI celuje w *retoryczne* domknięcie, nie w listę. Dlatego klasa `review` — osąd w Stage 2 rozstrzyga, a dopiero ≥3 wystąpienia w pliku eskalują do `block`.
+
+**Wzorce techniczne:** `,\s+a nie\b` · `,\s+nie\s+\w+(?:\s+\w+)?(?=[.!?;\n]|$)`
+
+---
+
 ### PL-RHYTHM — rytm / składnia (klasa: review; bloker po progu)
 
 | Problem | Przykład (błędny) | Dlaczego to AI-tell | Poprawka | Próg/klasa |
@@ -208,6 +223,7 @@ Semantyka: **„PASS z uwagami = NIE PASS"**. Każdy nierozwiązany flag po kore
 | PL-TYPO / EN-DASH em-dash | akapit z ≥3 myślnikami (—  lub  – ) |
 | PL-TYPO emoji w nagłówku | dowolne emoji w linii `##…` |
 | PL-RHET antyteza redefinicyjna | współwystępuje z ≥1 innym markerem w tym samym akapicie |
+| PL-ANTI seria antytez | ≥3 trafień „X, a nie Y" / „Y, nie X" w pliku (maniera rozsiana po akapitach) |
 | EN-ANTI seria antytez | pattern „not X, but Y; not Z, but W" (≥2 w bliskim sąsiedztwie) |
 | PL-RHYTHM łączniki-otwarcia | ≥3 w pliku lub ≥2 pod rząd |
 
@@ -240,6 +256,7 @@ plik | słowa | trafienia | em-dash/akapit(max) | gęstość/500 | blokery | WER
 | PL-SIGN | PL | review | Puste otwarcia i signposty („warto podkreślić", „zanurzmy się") |
 | PL-CLICHE | PL | review | Frazy-wytrychy i superlatywy („kluczową rolę", „przełomowy") |
 | PL-RHET | PL | block / review | Antyteza redefinicyjna (block), triady, paralelizm (review) |
+| PL-ANTI | PL | block / review | Antyteza przeciwstawna „X, a nie Y" / „Y, nie X" (review), seria ≥3 (block) |
 | PL-RHYTHM | PL | block / review | Nawał łączników (block ≥3), monotoniczny szyk SVO (review) |
 | PL-HEDGE | PL | review | Hedging: tryb warunkowy + „potencjalnie", „wydaje się że" |
 | PL-TYPO | PL | block / review | Em-dash ≥3/akapit (block), emoji w nagłówku (block), bold-overload (review) |
