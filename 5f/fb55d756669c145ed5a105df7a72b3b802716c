@@ -1,0 +1,27 @@
+tools/check_decision_log.py
+  s_b1f4aea171d2c2::t_253bdbb209d3e6 1-78
+tests/run_tests.sh
+  s_b1f4aea171d2c2::t_4f92ace55d410d 59-65
+.gitignore
+  s_b1f4aea171d2c2::t_9ddeaf093b2d2e 20-22
+docs/DECISION-LOG.md
+  s_b1f4aea171d2c2::t_5b3a7542b5d71a 1-65
+decision_log.py
+  s_b1f4aea171d2c2::t_95033da3435f7c 1-122
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "5ffb55d756669c145ed5a105df7a72b3b802716c",
+  "prompts": {},
+  "sessions": {
+    "s_b1f4aea171d2c2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "adfe49fb-2db9-454f-8881-22f8870c2ccc",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "<eryk@talentcanvas.tech>"
+    }
+  }
+}
