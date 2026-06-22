@@ -420,9 +420,13 @@ def scan_file(filepath: str, compiled_markers, lang_filter: str) -> Tuple[List[H
     # --- Detektory PROCEDURALNE (wołane po identyfikatorze z DETECTOR_REGISTRY) ---
     # Em-dash: dla EN → ID EN-DASH; dla PL/both → ID PL-TYPO. Próg/logika żyją w funkcjach detect_*;
     # tutaj tylko iterujemy rejestr w ustalonej kolejności i mapujemy klasę → blockers.
+    # C3 (adapter Markdown): detektory proceduralne liczą znaki PROZY, więc dostają tekst z
+    # WYZEROWANĄ zawartością kodu (bloki ```/~~~ i inline `…`) — myślniki/bold/triady w kodzie
+    # nie są manieryzmem prozy. strip_code_spans zachowuje długość i nowe linie → numery linii wierne.
+    prose_text = adapter.strip_code_spans(text)
     eff_lang = lang_filter if lang_filter != "both" else "pl"  # domyślnie PL dla both
     for detector_id, _adapter in DETECTOR_REGISTRY:
-        for (pline, pmid, pklasa, pfrag) in run_procedural_detector(detector_id, text, eff_lang):
+        for (pline, pmid, pklasa, pfrag) in run_procedural_detector(detector_id, prose_text, eff_lang):
             hits.append(Hit(filepath, pline, pmid, pklasa, pfrag))
             if pklasa == "block":
                 blockers += 1

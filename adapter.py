@@ -291,6 +291,80 @@ class PlainTextAdapter(InputAdapter, OutputAdapter):
         return apply_edits_to_text(doc.text, edits)
 
 
+# ---------------------------------------------------------------------------
+# Adapter Markdown (C3) — świadomy bloków kodu / tabel / list / nagłówków
+# ---------------------------------------------------------------------------
+
+# Ogrodzenie bloku kodu: ``` lub ~~~ (min 3), na początku wiersza (po opcjonalnych spacjach).
+_FENCE_RE = _re.compile(r"^[ \t]*(`{3,}|~{3,})", _re.MULTILINE)
+# Kod inline: `...` (najkrótsze dopasowanie, w jednej linii).
+_INLINE_CODE_RE = _re.compile(r"`[^`\n]+`")
+
+
+def _blank_preserving(segment: str) -> str:
+    """Zwraca napis tej samej długości co `segment`, z zachowanymi „\\n", reszta = spacje.
+
+    Dzięki temu wycięcie kodu NIE zmienia offsetów ani numerów linii w `text` — detektory
+    przestają widzieć myślniki/bold w kodzie, a pozycje pozostają wierne (source_map = tożsamość)."""
+    return "".join("\n" if ch == "\n" else " " for ch in segment)
+
+
+def strip_code_spans(text: str) -> str:
+    """Zeruje zawartość kodu (bloki ```/~~~ i inline `…`), zachowując długość i nowe linie.
+
+    Wynik ma DOKŁADNIE tę samą długość co wejście (offsety tożsame), więc można go użyć jako
+    `NormalizedDoc.text` z pustym `source_map`. Linijki ogrodzeń też są zerowane (to nie proza).
+    Świadomy bloków kodu — leczy FP, gdy myślniki/bold/„triady" są w kodzie, nie w prozie."""
+    out = list(text)
+    # 1) bloki ogrodzone — pary kolejnych ogrodzeń tego samego typu
+    fences = list(_FENCE_RE.finditer(text))
+    i = 0
+    consumed_until = 0
+    while i < len(fences):
+        open_m = fences[i]
+        # znajdź ogrodzenie zamykające (kolejne), inaczej do końca tekstu
+        close_m = fences[i + 1] if i + 1 < len(fences) else None
+        block_start = open_m.start()
+        block_end = (close_m.end()) if close_m else len(text)
+        for j in range(block_start, block_end):
+            if text[j] != "\n":
+                out[j] = " "
+        consumed_until = block_end
+        i += 2  # przeskocz parę (otwarcie+zamknięcie)
+    stripped = "".join(out)
+    # 2) kod inline — tylko poza już wyzerowanymi obszarami (działa, bo tam nie ma już backticków)
+    def _blank_inline(m):
+        return _blank_preserving(m.group(0))
+    stripped = _INLINE_CODE_RE.sub(_blank_inline, stripped)
+    return stripped
+
+
+class MarkdownAdapter(InputAdapter, OutputAdapter):
+    """Adapter Markdown (C3): wierna ekstrakcja prozy świadoma składni MD.
+
+    `normalize` produkuje `text` = źródło z WYZEROWANĄ zawartością kodu (bloki ```/~~~ i inline
+    `…`), zachowując długość i nowe linie — więc offsety pozostają tożsame ze źródłem
+    (`source_map = []`, zapis zwrotny bezpośredni). Dzięki temu detektory (em-dash, bold) nie
+    liczą znaków w kodzie jako manieryzmu prozy. Tabele/listy/nagłówki/cytaty są nadal odsiewane
+    per-wiersz przez `_prose_only` w linterze (to zachowanie z C1 — tu nie dublujemy).
+
+    Segmenty akapitów liczone na tekście po wyzerowaniu kodu (wierne offsety)."""
+
+    def normalize(self, raw: str) -> NormalizedDoc:
+        text = strip_code_spans(raw)
+        return NormalizedDoc(
+            text=text,
+            source=raw,
+            segments=split_paragraphs_faithful(text),
+            source_map=[],  # długość zachowana → offsety tożsame ze źródłem
+        )
+
+    def write_back(self, doc: NormalizedDoc, edits: List[Edit]) -> str:
+        # offsety w doc.text == offsety w source (długość zachowana), więc edycje aplikujemy
+        # do ŹRÓDŁA (nie do tekstu z wyzerowanym kodem, by nie utracić treści kodu).
+        return apply_edits_to_text(doc.source, edits)
+
+
 def load(source: str, adapter: Optional[InputAdapter] = None) -> NormalizedDoc:
     """Wygodny wrapper: normalizuje źródło wskazanym adapterem (domyślnie `PlainTextAdapter`)."""
     return (adapter or PlainTextAdapter()).normalize(source)

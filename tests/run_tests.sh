@@ -56,6 +56,13 @@ else
   echo "FAIL segmenter zdań — podział zdań rozjechał się (patrz wyżej)"; fail=1
 fi
 
+echo "== Adapter Markdown: zerowanie kodu (bloki/inline) (C3) =="
+if python3 "$DIR/../tools/measure_markdown.py"; then
+  : # OK — komunikat wypisuje sam skrypt
+else
+  echo "FAIL adapter Markdown — ekstrakcja prozy / zerowanie kodu rozjechało się (patrz wyżej)"; fail=1
+fi
+
 if [[ $fail -eq 0 ]]; then
   echo "WSZYSTKIE TESTY PRZESZŁY."
 else

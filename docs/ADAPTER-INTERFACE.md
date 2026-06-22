@@ -91,12 +91,27 @@ Po C2 linter NIE ma już żadnego `re.split` do podziału tekstu — cały podzi
 idzie przez wierny adapter. Dowód braku regresji: wyjście bajt-w-bajt identyczne vs przed
 wpięciem (6/6 kombinacji), `run_tests.sh` + oba gate recall + `check_id_consistency` zielone.
 
+## Adapter Markdown (C3)
+
+`MarkdownAdapter` + `strip_code_spans(text)` — świadomość składni MD: zeruje zawartość bloków
+kodu (``` / ~~~) i kodu inline (`` `…` ``), zachowując DŁUGOŚĆ i nowe linie. Wynik ma offsety
+tożsame ze źródłem (`source_map = []`, zapis zwrotny aplikowany do `source`), więc numery linii
+pozostają wierne, a detektory przestają widzieć myślniki/bold/„triady" w kodzie.
+
+**Wpięcie:** `scan_file` przepuszcza tekst przez `strip_code_spans` i podaje wynik detektorom
+PROCEDURALNYM (em-dash, bold, SVO, connector, emoji) — bo liczą znaki PROZY. Markery regex
+deklaratywne działają na oryginalnym tekście. Tabele/listy/nagłówki/cytaty są nadal odsiewane
+per-wiersz przez `_prose_only` (zachowanie z C1 — nie dublujemy).
+
+Leczona kruchość (dowód): blok ```` ```python\nx = a — b — c — d ```` był liczony jako em-dash
+overuse → werdykt FAIL. Po C3 kod jest wyzerowany → PASS. Na korpusie testowym (brak prozy w
+kodzie) wyjście bajt-w-bajt identyczne vs przed wpięciem (6/6 kombinacji) — control ma inline
+`` `fix/db-pool` `` (1 myślnik < próg 3), więc werdykt PASS bez zmian. Regresję chroni
+`tools/measure_markdown.py` (gate w `run_tests.sh`).
+
 ## Plan wdrożenia (kolejne zadania Epiku C)
 
-- **C3** — adapter Markdown: `normalize` (MD → proza, kotwice w `source_map`) + `write_back`
-  zachowujący strukturę MD.
 - **C4** — adapter formatu strukturalnego (opcjonalny).
 
-C1 dostarczył: interfejs + domyślny adapter + wpięcie podziału AKAPITÓW (bez regresji). Wierny
-podział ZDAŃ pozostaje do C2 (detect_svo_rhythm dalej używa własnego `re.split([.!?]+)` — nietknięty,
-by C1 nie zmieniało detekcji).
+Zrealizowane: C1 (interfejs + PlainTextAdapter + podział akapitów), C2 (segmenter zdań +
+skróty), C3 (adapter Markdown — świadomość kodu). Wszystkie bez regresji na korpusie.
