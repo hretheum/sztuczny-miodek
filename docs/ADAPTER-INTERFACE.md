@@ -105,11 +105,16 @@ offsetami (`doc.text[s.start:s.end] == s.text`). Adapter jest więc samodzielnym
 o strukturze (konsument może pominąć `block` przy regułach prozy), uogólniając per-wierszowy
 `_prose_only` na poziom segmentów — bez dublowania i bez zmiany detekcji.
 
-**Wpięcie:** `scan_file` przepuszcza tekst przez `strip_code_spans` i podaje wynik detektorom
-PROCEDURALNYM (em-dash, bold, SVO, connector, emoji) — bo liczą znaki PROZY. Markery regex
-deklaratywne działają na oryginalnym tekście. Tabele/listy/nagłówki/cytaty są nadal odsiewane
-per-wiersz przez `_prose_only` (zachowanie z C1 — nie dublujemy; segmenty `block` to równoległa,
-strukturalna reprezentacja dla konsumentów adaptera).
+**Wpięcie (wybór adaptera wg rozszerzenia):** `scan_file` wybiera adapter przez
+`_select_adapter(filepath)` — `.md`/`.markdown` → `MarkdownAdapter`, reszta → `PlainTextAdapter`
+(domyślna ścieżka, zachowanie sprzed C3). Wywołuje `adapter.normalize(text)` i podaje `doc.text`
+detektorom PROCEDURALNYM (em-dash, bold, SVO, connector, emoji) — bo liczą znaki PROZY; dla
+Markdown `doc.text` ma wyzerowany kod. Markery regex deklaratywne działają na oryginalnym tekście.
+Tabele/listy/nagłówki/cytaty są nadal odsiewane per-wiersz przez `_prose_only` (zachowanie z C1 —
+nie dublujemy; segmenty `block` to równoległa, strukturalna reprezentacja dla konsumentów adaptera).
+
+Różnica wg typu (zweryfikowana): ten sam tekst z blokiem ``` z 4 myślnikami → `.md` = PASS (kod
+wyzerowany), `.txt` = FAIL (PlainText nie zna składni MD). Domyślna ścieżka `.txt`/inne nietknięta.
 
 Leczona kruchość (dowód): blok ```` ```python\nx = a — b — c — d ```` był liczony jako em-dash
 overuse → werdykt FAIL. Po C3 kod jest wyzerowany → PASS. Na korpusie testowym (brak prozy w

@@ -386,6 +386,16 @@ def run_procedural_detector(detector_id: str, text: str, eff_lang: str) -> List[
     raise KeyError(f"Nieznany detektor proceduralny: {detector_id!r}")
 
 
+def _select_adapter(filepath: str):
+    """Wybiera adapter wejścia wg rozszerzenia (C3): `.md`/`.markdown` → Markdown, reszta → PlainText.
+
+    Domyślną ścieżką jest PlainText (zachowanie sprzed C3 dla nie-Markdown). Markdown dokłada
+    świadomość bloków kodu (zerowanie ```/~~~ i inline `…`) bez zmiany offsetów."""
+    if filepath.lower().endswith((".md", ".markdown")):
+        return adapter.MarkdownAdapter()
+    return adapter.PlainTextAdapter()
+
+
 def scan_file(filepath: str, compiled_markers, lang_filter: str) -> Tuple[List[Hit], FileSummary]:
     """Skanuje jeden plik. Zwraca (hits, summary)."""
     try:
@@ -420,10 +430,11 @@ def scan_file(filepath: str, compiled_markers, lang_filter: str) -> Tuple[List[H
     # --- Detektory PROCEDURALNE (wołane po identyfikatorze z DETECTOR_REGISTRY) ---
     # Em-dash: dla EN → ID EN-DASH; dla PL/both → ID PL-TYPO. Próg/logika żyją w funkcjach detect_*;
     # tutaj tylko iterujemy rejestr w ustalonej kolejności i mapujemy klasę → blockers.
-    # C3 (adapter Markdown): detektory proceduralne liczą znaki PROZY, więc dostają tekst z
-    # WYZEROWANĄ zawartością kodu (bloki ```/~~~ i inline `…`) — myślniki/bold/triady w kodzie
-    # nie są manieryzmem prozy. strip_code_spans zachowuje długość i nowe linie → numery linii wierne.
-    prose_text = adapter.strip_code_spans(text)
+    # C3: adapter wybierany wg rozszerzenia (.md → MarkdownAdapter, reszta → PlainTextAdapter).
+    # Detektory proceduralne liczą znaki PROZY, więc dostają `doc.text` — dla Markdown z WYZEROWANĄ
+    # zawartością kodu (bloki ```/~~~ i inline `…`), z zachowaną długością i numerami linii.
+    doc = _select_adapter(filepath).normalize(text)
+    prose_text = doc.text
     eff_lang = lang_filter if lang_filter != "both" else "pl"  # domyślnie PL dla both
     for detector_id, _adapter in DETECTOR_REGISTRY:
         for (pline, pmid, pklasa, pfrag) in run_procedural_detector(detector_id, prose_text, eff_lang):
