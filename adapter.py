@@ -443,8 +443,10 @@ from html.parser import HTMLParser as _HTMLParser
 _HTML_BLOCK_TAGS = frozenset({
     "p", "div", "li", "ul", "ol", "h1", "h2", "h3", "h4", "h5", "h6",
     "blockquote", "tr", "td", "th", "table", "section", "article", "header",
-    "footer", "pre", "br", "hr",
+    "footer", "pre", "hr",
 })
+# <br> = MIĘKKI podział (pojedynczy „\n", nie granica akapitu „\n\n") — spójnie z briefem C4.
+_HTML_SOFT_BREAK_TAGS = frozenset({"br"})
 # Znaczniki, których ZAWARTOŚĆ to nie proza (jak bloki kodu w MD) — pomijana.
 _HTML_SKIP_CONTENT_TAGS = frozenset({"code", "pre", "script", "style"})
 
@@ -468,6 +470,9 @@ class _ProseHTMLParser(_HTMLParser):
         if tag in _HTML_BLOCK_TAGS and self.parts and not self.parts[-1].endswith("\n\n"):
             self.parts.append("\n\n")
             self.text_len += 2
+        elif tag in _HTML_SOFT_BREAK_TAGS and self.parts and not self.parts[-1].endswith("\n"):
+            self.parts.append("\n")          # <br> = miękki podział (nie nowy akapit)
+            self.text_len += 1
 
     def handle_endtag(self, tag):
         if tag in _HTML_SKIP_CONTENT_TAGS and self._skip_depth > 0:

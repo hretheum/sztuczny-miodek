@@ -136,28 +136,31 @@ Po co: storage wiki (np. Confluence) i HTML wyznaczają granice akapitów ZNACZN
 myślniki/bold z różnych `<p>` liczone razem = fałszywy em-dash overuse (realny powód FP przy
 audycie stron wiki).
 
-Co robi szkielet (rdzeń działa, gate `tools/measure_structural.py`):
+Co robi (rdzeń + wpięcie, gate `tools/measure_structural.py`):
 - granice akapitów ze znaczników blokowych (separator `\n\n` na start/koniec bloku),
+- `<br>` jako **miękki podział** (pojedynczy `\n` — linie zostają w jednym akapicie, nie nowy akapit),
 - ekstrakcja prozy; zawartość `code`/`pre`/`script`/`style` pomijana (jak bloki kodu w MD),
 - `source_map` (proza→źródło) — **pierwszy adapter z nietożsamym mapowaniem**, bo usuwanie tagów
   zmienia długość; `to_source_offset` wskazuje pozycję w oryginale (dla zapisu zwrotnego),
 - segmenty `paragraph` z wiernym podziałem na wyekstrahowanej prozie.
 
-Dowód (zweryfikowany): HTML z 4 `<p>` po 1 myślniku → PlainText zlewa w 1 akapit z 4 myślnikami =
-em-dash overuse (FP); StructuralAdapter rozdziela na 4 akapity = brak FP.
+**Wpięcie wg rozszerzenia:** `_select_adapter` routuje `.html`/`.htm`/`.xhtml` → `StructuralAdapter`
+(`.md`→Markdown, reszta→PlainText). `collect_files` skanuje też pliki HTML (`_SCANNED_EXTS`).
+Domyślna ścieżka `.md`/`.txt` nietknięta (output bajt-w-bajt identyczny vs przed wpięciem).
 
-NIE wpięty do produkcyjnej ścieżki `scan_file` (`collect_files` obsługuje `.md`/`.txt`; HTML to
-osobny typ wejścia). Wpięcie = przyszły krok; linter nietknięty.
+Dowód leczenia (end-to-end, zweryfikowany): ten sam płaski HTML z 4 `<p>` po 1 myślniku →
+`.txt` = FAIL (PlainText zlewa w 1 akapit z 4 myślnikami = em-dash overuse), `.html` = PASS
+(StructuralAdapter rozdziela na 4 akapity). To realny powód FP przy audycie stron wiki.
 
-### Plan rozbudowy (do pełnego adaptera)
-1. **Wpięcie wejścia**: rozszerzyć `collect_files` o `.html`/`.htm`/`.xhtml` + `_select_adapter`
-   o routing do `StructuralAdapter`; smoke na realnych eksportach wiki.
-2. **OutputAdapter (zapis zwrotny)**: edycje prozy → źródło HTML przez `source_map` (kotwice
-   odcinkami liniowe; dziś `StructuralAdapter` jest tylko `InputAdapter`).
-3. **Pełniejsze pokrycie**: zagnieżdżone tabele/listy, atrybuty `alt`/`title` jako proza, encje
-   brzegowe, `<br>` jako miękka granica, segmenty `block` dla struktur (jak w Markdown C3).
-4. **Confluence storage**: obsługa `<ac:*>`/`<ri:*>` (makra) jako bloków nie-prozy.
-5. **Korpus + gate**: zestaw stron wiki z zasianymi tellami (jak GROUND_TRUTH) + pomiar precyzji.
+### Plan rozbudowy (pozostałe, do pełnego adaptera)
+- ✅ Wpięcie wejścia (`.html`/`.htm`/`.xhtml` w `collect_files` + `_select_adapter`) — ZROBIONE.
+- ✅ `<br>` jako miękka granica — ZROBIONE.
+- **OutputAdapter (zapis zwrotny)**: edycje prozy → źródło HTML przez `source_map` (kotwice
+  odcinkami liniowe; dziś `StructuralAdapter` to tylko `InputAdapter`).
+- **Pełniejsze pokrycie**: zagnieżdżone tabele/listy, atrybuty `alt`/`title` jako proza, encje
+  brzegowe, segmenty `block` dla struktur (jak w Markdown C3).
+- **Confluence storage**: obsługa `<ac:*>`/`<ri:*>` (makra) jako bloków nie-prozy.
+- **Korpus + gate**: zestaw stron wiki z zasianymi tellami (jak GROUND_TRUTH) + pomiar precyzji.
 
 ## Status Epiku C
 

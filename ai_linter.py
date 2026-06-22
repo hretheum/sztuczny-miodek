@@ -387,12 +387,16 @@ def run_procedural_detector(detector_id: str, text: str, eff_lang: str) -> List[
 
 
 def _select_adapter(filepath: str):
-    """Wybiera adapter wejścia wg rozszerzenia (C3): `.md`/`.markdown` → Markdown, reszta → PlainText.
+    """Wybiera adapter wejścia wg rozszerzenia: `.md`/`.markdown` → Markdown (C3),
+    `.html`/`.htm`/`.xhtml` → Structural (C4), reszta → PlainText (domyślna, zachowanie sprzed C3).
 
-    Domyślną ścieżką jest PlainText (zachowanie sprzed C3 dla nie-Markdown). Markdown dokłada
-    świadomość bloków kodu (zerowanie ```/~~~ i inline `…`) bez zmiany offsetów."""
-    if filepath.lower().endswith((".md", ".markdown")):
+    Markdown dokłada świadomość bloków kodu (zerowanie ```/~~~ i inline `…`) bez zmiany offsetów.
+    Structural wyznacza granice akapitów ze znaczników HTML (leczy FP zlewania akapitów w wiki)."""
+    low = filepath.lower()
+    if low.endswith((".md", ".markdown")):
         return adapter.MarkdownAdapter()
+    if low.endswith((".html", ".htm", ".xhtml")):
+        return adapter.StructuralAdapter()
     return adapter.PlainTextAdapter()
 
 
@@ -536,8 +540,13 @@ def scan_file(filepath: str, compiled_markers, lang_filter: str) -> Tuple[List[H
     return hits, summary
 
 
+# Rozszerzenia plików skanowane przy przeszukiwaniu katalogów. Pojedyncze pliki podane wprost
+# są skanowane niezależnie od rozszerzenia. .html/.htm/.xhtml → adapter strukturalny (C4).
+_SCANNED_EXTS = (".md", ".txt", ".html", ".htm", ".xhtml")
+
+
 def collect_files(paths: List[str]) -> List[str]:
-    """Zbiera pliki .md i .txt z podanych ścieżek, obsługuje glob i katalogi."""
+    """Zbiera pliki tekstowe/Markdown/HTML z podanych ścieżek, obsługuje glob i katalogi."""
     result = []
     for p in paths:
         # Glob
@@ -547,14 +556,14 @@ def collect_files(paths: List[str]) -> List[str]:
                 if os.path.isdir(ep):
                     for root, _, files in os.walk(ep):
                         for fn in files:
-                            if fn.endswith((".md", ".txt")):
+                            if fn.endswith(_SCANNED_EXTS):
                                 result.append(os.path.join(root, fn))
                 elif os.path.isfile(ep):
                     result.append(ep)
         elif os.path.isdir(p):
             for root, _, files in os.walk(p):
                 for fn in files:
-                    if fn.endswith((".md", ".txt")):
+                    if fn.endswith(_SCANNED_EXTS):
                         result.append(os.path.join(root, fn))
         elif os.path.isfile(p):
             result.append(p)

@@ -64,9 +64,30 @@ def c_source_preserved():
     return doc.source == html
 
 
+def c_br_soft_break():
+    # <br> = miękki podział: linie zostają w JEDNYM akapicie (nie rozbija na dwa)
+    html = "<p>Linia jeden<br>linia dwa</p><p>Drugi akapit.</p>"
+    doc = adapter.StructuralAdapter().normalize(html)
+    paras = [s.text.strip() for s in doc.paragraphs() if s.text.strip()]
+    return len(paras) == 2 and "\n" in paras[0]
+
+
+def c_routing_by_extension():
+    # routing wg rozszerzenia: .html → Structural, .md → Markdown, .txt → PlainText
+    import ai_linter
+    return (
+        type(ai_linter._select_adapter("x.html")).__name__ == "StructuralAdapter"
+        and type(ai_linter._select_adapter("x.htm")).__name__ == "StructuralAdapter"
+        and type(ai_linter._select_adapter("x.md")).__name__ == "MarkdownAdapter"
+        and type(ai_linter._select_adapter("x.txt")).__name__ == "PlainTextAdapter"
+    )
+
+
 check("granice akapitów ze znaczników blokowych <p>", c_block_boundaries)
 check("myślniki z różnych <p> nie zlewają się (brak FP em-dash)", c_emdash_not_merged)
 check("zawartość <code> pomijana w prozie", c_code_skipped)
+check("<br> = miękki podział (linie w jednym akapicie)", c_br_soft_break)
+check("routing wg rozszerzenia (.html→Structural, .md→Markdown, .txt→PlainText)", c_routing_by_extension)
 check("source_map mapuje pozycję prozy na źródło", c_source_map)
 check("source zachowane (oryginalny HTML)", c_source_preserved)
 
