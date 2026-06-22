@@ -338,7 +338,7 @@ Sekcja wygenerowana automatycznie z `rules.json` przez `tools/gen_doc_catalog.py
 | antyteza redefinicyjna: To nie X. To Y | `[Tt]o nie (?:jest )?.{1,40}\.\s+[Tt]o\b` |
 | paralelizm: nie tylko… ale również | `\bnie tylko\b.{1,80}?\b(?:ale\|lecz)(?: również\| także\| i)?\b` |
 | dychotomia: z jednej strony | `\bz jednej strony\b` |
-| triada? | `\b(\w+), (\w+),? (?:i\|oraz) (\w+)\b` |
+| triada? (3 paralelne wyrazy ≥3 liter; człony 2-3 małymi literami → mniej FP na nazwach własnych/liczbach/wyliczeniach faktów) | `\b([a-ząćęłńóśźż]{3,}), (?-i:[a-ząćęłńóśźż]{3,}),? (?:i\|oraz) (?-i:[a-ząćęłńóśźż]{3,})\b` |
 | rozpiętość: od X po Y | `\bod \w+(?:y\|ów\|i)? (?:po\|aż po) \w+` |
 
 ### PL-ANTI — PL — klasa: review
@@ -377,7 +377,7 @@ Sekcja wygenerowana automatycznie z `rules.json` przez `tools/gen_doc_catalog.py
 
 | Opis | Wzorzec (regex) |
 |---|---|
-| triad? | `\b(\w+), (\w+),? and (\w+)\b` |
+| triad? (3 paralelne wyrazy ≥3 liter; człony 2-3 małymi literami → mniej FP na nazwach własnych/liczbach/wyliczeniach faktów) | `\b([a-z]{3,}), (?-i:[a-z]{3,}),? and (?-i:[a-z]{3,})\b` |
 
 ### EN-PARA — EN — klasa: review
 

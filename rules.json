@@ -185,8 +185,8 @@
     "id": "PL-RHET",
     "lang": "pl",
     "klasa": "review",
-    "pattern": "\\b(\\w+), (\\w+),? (?:i|oraz) (\\w+)\\b",
-    "opis": "triada?"
+    "pattern": "\\b([a-ząćęłńóśźż]{3,}), (?-i:[a-ząćęłńóśźż]{3,}),? (?:i|oraz) (?-i:[a-ząćęłńóśźż]{3,})\\b",
+    "opis": "triada? (3 paralelne wyrazy ≥3 liter; człony 2-3 małymi literami → mniej FP na nazwach własnych/liczbach/wyliczeniach faktów)"
   },
   {
     "id": "PL-RHET",
@@ -283,8 +283,8 @@
     "id": "EN-TRIAD",
     "lang": "en",
     "klasa": "review",
-    "pattern": "\\b(\\w+), (\\w+),? and (\\w+)\\b",
-    "opis": "triad?"
+    "pattern": "\\b([a-z]{3,}), (?-i:[a-z]{3,}),? and (?-i:[a-z]{3,})\\b",
+    "opis": "triad? (3 paralelne wyrazy ≥3 liter; człony 2-3 małymi literami → mniej FP na nazwach własnych/liczbach/wyliczeniach faktów)"
   },
   {
     "id": "EN-PARA",
