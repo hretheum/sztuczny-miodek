@@ -27,7 +27,7 @@ Frazy, które nie wnoszą treści — jedynie sygnalizują, że AI „przechodzi
 | Zaproszenia do zagłębiania: „Zanurzmy się / przyjrzyjmy się bliżej…" | „Przyjrzyjmy się bliżej temu zagadnieniu." | AI-tell: naśladowanie stylu edukacyjnego wideo. | Usuń; zacznij od meritum. | review |
 | „Mam nadzieję, że ten / ta / to…" | „Mam nadzieję, że ta analiza okaże się pomocna." | Kurtuazyjna formułka AI na końcu odpowiedzi. | Usuń całkowicie. | review |
 
-**Wzorce techniczne (regex, Python `re.IGNORECASE | re.UNICODE`):**
+**Wzorce techniczne (regex, Python `re.IGNORECASE | re.UNICODE`):** _(lista poglądowa, może być niekompletna — źródło prawdy regexów: sekcja „Katalog reguł" niżej, auto-generowana z `rules.json`)_
 `\bwarto (?:tu )?(?:podkreśl|zauważ|zaznacz|pamięta|dodać|wspomnieć|nadmienić|zwrócić uwagę)` · `\bnależy (?:tu )?(?:zauważyć|podkreślić|pamiętać|zaznaczyć|dodać|wspomnieć)\b` · `\bco (?:istotne|ważne|ciekawe|znamienne|warte odnotowania),` · `\bw dzisiejszych czasach\b` · `\bw (?:dobie|obliczu|erze)\b` · `\bw dynamicznie (?:zmieniając|rozwijając)\w* się\b` · `\bnie sposób (?:przecenić|nie\b)` · `\bjak (?:powszechnie )?wiadomo\b` · `\b(?:podsumowując|reasumując|konkludując|wnioskując|na zakończenie)\b` · `\b(?:zanurzmy|zagłębmy|przyjrzyjmy|zastanówmy|skupmy|pochylmy) się\b` · `\bprzyjrzyjmy się bliżej\b` · `\bmam nadzieję, że (?:ten|ta|to|powyższ|niniejsz)`
 
 ---
@@ -252,6 +252,8 @@ plik | słowa | trafienia | em-dash/akapit(max) | gęstość/500 | blokery | WER
 ---
 
 ## Katalog reguł (auto-generowany z rules.json)
+
+> **Źródło prawdy regexów.** Poniższy katalog (sekcja ujęta w znaczniki „RULES:START" / „RULES:END") jest JEDYNYM miarodajnym źródłem wzorców regex — generowany automatycznie z `rules.json` przez `tools/gen_doc_catalog.py`. Listy „Wzorce techniczne" przy poszczególnych kategoriach wyżej mają charakter wyłącznie opisowy i mogą być NIEKOMPLETNE względem `rules.json` (do czasu pełnej konsolidacji). W razie rozbieżności rozstrzyga ten katalog.
 
 <!-- RULES:START -->
 Sekcja wygenerowana automatycznie z `rules.json` przez `tools/gen_doc_catalog.py` — nie edytuj ręcznie. Liczba reguł regexowych: 47 w 13 kategoriach.

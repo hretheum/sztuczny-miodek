@@ -99,15 +99,33 @@ def render_section(rules) -> str:
 
 
 def inject(doc: str, section: str) -> str:
-    """Podmienia zawartość między znacznikami BEGIN/END. Wymaga obecnych znaczników."""
+    """Podmienia zawartość między znacznikami BEGIN/END.
+
+    Wymaga DOKŁADNIE jednego BEGIN_MARK i jednego END_MARK we właściwej kolejności.
+    Gdyby znacznik pojawił się dodatkowo gdzie indziej (np. literalnie w prozie/disclaimerze),
+    generator ODMAWIA (exit 2) zamiast cicho uszkodzić dokument, podmieniając zły fragment.
+    """
+    n_begin = doc.count(BEGIN_MARK)
+    n_end = doc.count(END_MARK)
+    if n_begin == 0 or n_end == 0:
+        print(f"[ERROR] Brak znaczników {BEGIN_MARK} ... {END_MARK} w {DOC_PATH}",
+              file=sys.stderr)
+        sys.exit(2)
+    if n_begin != 1 or n_end != 1:
+        print(f"[ERROR] {DOC_PATH}: oczekiwano DOKŁADNIE jednej pary znaczników, znaleziono "
+              f"{n_begin}× {BEGIN_MARK} i {n_end}× {END_MARK}. Usuń literalne wystąpienia "
+              f"znaczników z prozy (np. ujmij nazwy w cudzysłów: „RULES:START\").",
+              file=sys.stderr)
+        sys.exit(2)
+    if doc.index(BEGIN_MARK) > doc.index(END_MARK):
+        print(f"[ERROR] {DOC_PATH}: znacznik {END_MARK} występuje przed {BEGIN_MARK}.",
+              file=sys.stderr)
+        sys.exit(2)
+
     pattern = re.compile(
         re.escape(BEGIN_MARK) + r".*?" + re.escape(END_MARK),
         re.DOTALL,
     )
-    if not pattern.search(doc):
-        print(f"[ERROR] Brak znaczników {BEGIN_MARK} ... {END_MARK} w {DOC_PATH}",
-              file=sys.stderr)
-        sys.exit(2)
     return pattern.sub(lambda _m: section, doc, count=1)
 
 
