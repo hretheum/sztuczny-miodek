@@ -91,6 +91,10 @@ class NormalizedDoc:
         i dodaj różnicę. Pusty `source_map` => tożsamość. Implementacja kotwic należy do adaptera
         (C3/C4) — tu definiujemy tylko semantykę odczytu.
         """
+        if not (0 <= text_offset <= len(self.text)):
+            raise ValueError(
+                f"text_offset poza zakresem: {text_offset} (dozwolone 0..{len(self.text)})"
+            )
         if not self.source_map:
             return text_offset
         src = text_offset
@@ -112,6 +116,10 @@ class Edit:
     start: int
     end: int
     replacement: str
+
+    def __post_init__(self):
+        if self.start < 0 or self.end < self.start:
+            raise ValueError(f"Niepoprawny zakres edycji: [{self.start}, {self.end})")
 
 
 # ---------------------------------------------------------------------------

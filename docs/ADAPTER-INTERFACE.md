@@ -24,14 +24,21 @@ po zależność tylko jeśli to konieczne.
 
 | Typ | Rola |
 |---|---|
-| `Segment(kind, text, start, end, parent)` | fragment z wiernym zakresem w `doc.text`; `kind ∈ {paragraph, sentence, block}` |
+| `Segment(kind, text, start, end, line, parent)` | fragment z wiernym zakresem w `doc.text`; `kind ∈ {paragraph, sentence, block}` |
 | `NormalizedDoc(text, source, segments, source_map)` | tekst znormalizowany + segmenty + mostek pozycji do źródła |
-| `Edit(start, end, replacement)` | poprawka na pozycjach w `doc.text` (`replacement=""` = usunięcie) |
+| `Edit(start, end, replacement)` | poprawka na pozycjach w `doc.text` (`replacement=""` = usunięcie); waliduje `start>=0`, `end>=start` |
 | `InputAdapter` (ABC) | `normalize(raw) -> NormalizedDoc` |
 | `OutputAdapter` (ABC) | `write_back(doc, edits) -> str` (zaktualizowane źródło) |
 
+Pole `Segment.line` to numer linii **1-based** początku segmentu w tekście znormalizowanym,
+wyliczany jako `text.count("\n", 0, start) + 1` (nie wymaga `source_map`). To jedna z głównych
+motywacji Epiku C — poprawne numery linii w manifeście lintera.
+
 Pomocnik: `apply_edits_to_text(text, edits)` — nanosi edycje od najpóźniejszego offsetu
 (wcześniejsze pozostają ważne), wykrywa nakładające się edycje.
+
+`NormalizedDoc.to_source_offset(t)` waliduje `0 <= t <= len(text)` (czytelny błąd przy
+offsecie poza zakresem — chroni adaptery C3/C4).
 
 ## Mapowanie pozycji (zapis zwrotny)
 
