@@ -44,8 +44,10 @@ def load_marker_defs(path: str = RULES_PATH) -> List[Tuple[str, str, str, str, s
     """Wczytuje katalog markerów z rules.json do listy 5-krotek (id, lang, klasa, pattern, opis).
 
     Zachowuje kolejność wpisów i duplikaty ID 1:1. Pola opcjonalne (prog/przyklady/doc) są
-    pomijane — ta warstwa odwzorowuje wyłącznie dawny literał MARKER_DEFS. Przy braku pliku
-    lub niepoprawnym JSON-ie kończy z czytelnym błędem (linter bez reguł nie ma sensu).
+    pomijane — ta warstwa odwzorowuje wyłącznie dawny literał MARKER_DEFS.
+
+    Kończy z czytelnym błędem (exit 2) gdy: brak pliku, niepoprawny JSON, korzeń JSON nie
+    jest listą reguł, lub wpis nie ma wymaganego pola (linter bez poprawnych reguł nie ma sensu).
     """
     try:
         with open(path, "r", encoding="utf-8") as f:
@@ -66,8 +68,15 @@ def load_marker_defs(path: str = RULES_PATH) -> List[Tuple[str, str, str, str, s
     for i, r in enumerate(raw):
         try:
             defs.append((r["id"], r["lang"], r["klasa"], r["pattern"], r["opis"]))
-        except (TypeError, KeyError) as e:
-            print(f"[ERROR] rules.json: wpis #{i} bez wymaganego pola {e}", file=sys.stderr)
+        except KeyError as e:
+            # e.args[0] = nazwa brakującego klucza (bez apostrofów surowego str(KeyError))
+            print(f"[ERROR] rules.json: wpis #{i} — brakujące wymagane pole: {e.args[0]}",
+                  file=sys.stderr)
+            sys.exit(2)
+        except TypeError:
+            # wpis nie jest obiektem (np. liczba / string zamiast słownika reguły)
+            print(f"[ERROR] rules.json: wpis #{i} nie jest obiektem reguły (otrzymano "
+                  f"{type(r).__name__})", file=sys.stderr)
             sys.exit(2)
     return defs
 
