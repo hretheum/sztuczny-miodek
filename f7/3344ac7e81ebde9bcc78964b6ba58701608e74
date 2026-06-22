@@ -1,0 +1,23 @@
+dictionary.schema.md
+  s_b1f4aea171d2c2::t_2678544a7a1e02 30-33
+ai_linter.py
+  s_b1f4aea171d2c2::t_bfd4addd8fea8e 685-687,690-692
+tools/build_dict.py
+  s_b1f4aea171d2c2::t_1a6c0bf7b7add1 57,60-62,72,74,77-81
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "f73344ac7e81ebde9bcc78964b6ba58701608e74",
+  "prompts": {},
+  "sessions": {
+    "s_b1f4aea171d2c2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "adfe49fb-2db9-454f-8881-22f8870c2ccc",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "<eryk@talentcanvas.tech>"
+    }
+  }
+}
