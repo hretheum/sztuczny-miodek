@@ -1,0 +1,23 @@
+docs/ADAPTER-INTERFACE.md
+  s_b1f4aea171d2c2::t_76995792fd73e4 70-86
+adapter.py
+  s_b1f4aea171d2c2::t_4623be70d7bd38 199-225
+ai_linter.py
+  s_b1f4aea171d2c2::t_db1254682e2010 202-204,207-208,212
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "d588dbdb37b82020b8be3796060bca87446cd7d2",
+  "prompts": {},
+  "sessions": {
+    "s_b1f4aea171d2c2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "adfe49fb-2db9-454f-8881-22f8870c2ccc",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "<eryk@talentcanvas.tech>"
+    }
+  }
+}
