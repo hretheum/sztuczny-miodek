@@ -27,12 +27,16 @@ from typing import Callable, List, Tuple
 # Katalog skryptu na ścieżce importu (linter wołany ścieżką bezwzględną z dowolnego cwd),
 # by `import adapter` działał niezależnie od bieżącego katalogu — tak jak RULES_PATH względem __file__.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import adapter  # noqa: E402 — domyślny adapter wejścia/wyjścia (C1, wierny podział akapitów)
-import config   # noqa: E402 — progi/profile jako konfiguracja (D1)
+import adapter     # noqa: E402 — domyślny adapter wejścia/wyjścia (C1, wierny podział akapitów)
+import config      # noqa: E402 — progi/profile jako konfiguracja (D1)
+import dictionary  # noqa: E402 — słownik domenowy: warstwa nadrzędna terminów (D2)
 
 # Progi proceduralne ładowane z config.json (profil aktywny; brak pliku → wartości historyczne).
 # Zero zmiany zachowania dla profilu „default". Nadpisywalne przez --profile w main().
 THRESHOLDS = config.load_thresholds()
+
+# Słownik domenowy (D2): domyślnie None → obecne zachowanie. Ustawiany przez --dict w main().
+DICTIONARY = None
 
 
 # ---------------------------------------------------------------------------
@@ -468,9 +472,17 @@ def scan_file(filepath: str, compiled_markers, lang_filter: str) -> Tuple[List[H
         for m in cre.finditer(text):
             line = get_line_number(text, m.start())
             fragment = truncate_fragment(m.group(0))
-            # Dla PL-RHET review i reszty — normalne trafienie
-            hits.append(Hit(filepath, line, mid, mclass, fragment))
-            if mclass == "block":
+            # D2: słownik domenowy jako warstwa nadrzędna terminów. allow → pomiń trafienie;
+            # review → obniż klasę do „review" (nie blokuje). Brak słownika → bez zmian.
+            eff_class = mclass
+            if DICTIONARY is not None:
+                verdict = DICTIONARY.classify(fragment)
+                if verdict == "allow":
+                    continue  # termin dopuszczony w domenie — nie flaguj
+                if verdict == "review" and mclass == "block":
+                    eff_class = "review"
+            hits.append(Hit(filepath, line, mid, eff_class, fragment))
+            if eff_class == "block":
                 blockers += 1
 
     # Antyteza redefinicyjna PL: sprawdź współwystąpienie z innymi markerami w tym samym akapicie
@@ -651,6 +663,13 @@ def main():
         default=None,
         help="Profil progów z config.json (np. default/luzny/ostry). Domyślnie: active_profile z configu.",
     )
+    parser.add_argument(
+        "--dict",
+        default=None,
+        metavar="ŚCIEŻKA",
+        help="Słownik domenowy (JSON: allow/review/provenance) jako warstwa nadrzędna terminów (D2). "
+             "Domyślnie brak słownika = obecne zachowanie.",
+    )
     args = parser.parse_args()
 
     # D1: jeśli wskazano --profile, przeładuj progi proceduralne dla tego profilu.
@@ -661,6 +680,17 @@ def main():
         except ValueError as e:
             print(f"[ERROR] {e}", file=sys.stderr)
             sys.exit(2)
+
+    # D2: jeśli wskazano --dict, wczytaj słownik domenowy (warstwa nadrzędna terminów).
+    if args.dict is not None:
+        global DICTIONARY
+        try:
+            DICTIONARY = dictionary.load_dictionary(args.dict)
+        except ValueError as e:
+            print(f"[ERROR] {e}", file=sys.stderr)
+            sys.exit(2)
+        if DICTIONARY is None:
+            print(f"[WARN] Słownik nie istnieje: {args.dict} — kontynuuję bez słownika.", file=sys.stderr)
 
     files = collect_files(args.paths)
     if not files:

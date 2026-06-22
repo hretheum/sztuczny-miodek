@@ -1,0 +1,18 @@
+{
+  "provenance": {
+    "projekt": "przyklad-domeny-technicznej",
+    "wersja": "1.0",
+    "data": "2026-06-23",
+    "autor": "operator",
+    "zrodlo": "ręczny zalążek; docelowo build-dict z korpusu (D3) + log decyzji (D4)"
+  },
+  "allow": [
+    "robust",
+    "design system",
+    "framework"
+  ],
+  "review": [
+    "leverage",
+    "leverages"
+  ]
+}

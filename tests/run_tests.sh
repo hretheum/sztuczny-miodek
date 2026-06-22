@@ -42,6 +42,13 @@ else
   echo "FAIL config — profil default != progi historyczne lub niepoprawny profil (patrz wyżej)"; fail=1
 fi
 
+echo "== Słownik domenowy: format/classify/zero-zmiany (D2) =="
+if python3 "$DIR/../tools/check_dictionary.py"; then
+  : # OK — komunikat wypisuje sam skrypt
+else
+  echo "FAIL słownik — format/classify/fallback rozjechał się (patrz wyżej)"; fail=1
+fi
+
 echo "== Recall triady: PL-RHET/EN-TRIAD na tests/triad_eval.md (B1) =="
 if python3 "$DIR/../tools/measure_triad.py" --min-recall 1.0; then
   : # OK — komunikat wypisuje sam skrypt
