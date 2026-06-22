@@ -52,6 +52,7 @@ class Segment:
     text: str            # treść segmentu (dokładnie wycinek doc.text[start:end])
     start: int           # offset początku w tekście znormalizowanym (0-based, włącznie)
     end: int             # offset końca w tekście znormalizowanym (wyłącznie)
+    line: int = 1        # numer linii (1-based) początku segmentu w tekście znormalizowanym
     parent: Optional[int] = None  # indeks segmentu-rodzica (np. akapit dla zdania); None = top-level
 
     def __post_init__(self):
@@ -154,3 +155,61 @@ def apply_edits_to_text(text: str, edits: List[Edit]) -> str:
     for e in ordered:
         out = out[:e.start] + e.replacement + out[e.end:]
     return out
+
+
+# ---------------------------------------------------------------------------
+# Domyślny adapter „plain / markdown-lite" (C1) — wierny podział akapitów
+# ---------------------------------------------------------------------------
+
+import re as _re
+
+# Separator akapitu: pusta linia (z dowolnymi białymi znakami). Ten sam wzorzec co historyczny
+# split_paragraphs, ale tu offset KAŻDEGO akapitu jest wyznaczany WPROST z `finditer` na separatorach
+# (a nie zliczany przybliżeniem `+2`) — to leczy kruchość przy „\n \n", „\n\n\n" itd.
+_PARA_SEP_RE = _re.compile(r"\n\s*\n")
+
+
+def split_paragraphs_faithful(text: str) -> List[Segment]:
+    """Wierny podział na akapity: każdy `Segment` zna dokładny [start, end) i numer linii.
+
+    Niezmiennik: `text[seg.start:seg.end] == seg.text`. Zwraca segmenty „paragraph" w kolejności
+    wystąpienia, włącznie z akapitami pustymi (by zachować zgodność liczby/indeksów z historycznym
+    `re.split(r"\\n\\s*\\n", text)`, które również zwraca puste pola na brzegach/zwielokrotnieniach)."""
+    segments: List[Segment] = []
+    starts_ends: List[Tuple[int, int]] = []
+    pos = 0
+    for m in _PARA_SEP_RE.finditer(text):
+        starts_ends.append((pos, m.start()))
+        pos = m.end()
+    starts_ends.append((pos, len(text)))
+    for start, end in starts_ends:
+        line = text.count("\n", 0, start) + 1
+        segments.append(Segment("paragraph", text[start:end], start, end, line=line))
+    return segments
+
+
+class PlainTextAdapter(InputAdapter, OutputAdapter):
+    """Domyślny adapter: traktuje źródło jako czysty tekst (markdown-lite — bez przekształceń).
+
+    `text == source` (mapowanie tożsamościowe, pusty `source_map`), więc offsety w `doc.text`
+    pokrywają się ze źródłem i zapis zwrotny jest bezpośredni. Podział akapitów jest WIERNY
+    (`split_paragraphs_faithful`). Zachowuje zgodność z historycznym `split_paragraphs`
+    (te same granice akapitów), różniąc się tylko TYM, że offset nie jest przybliżony.
+    """
+
+    def normalize(self, raw: str) -> NormalizedDoc:
+        return NormalizedDoc(
+            text=raw,
+            source=raw,
+            segments=split_paragraphs_faithful(raw),
+            source_map=[],  # tożsamość: text == source
+        )
+
+    def write_back(self, doc: NormalizedDoc, edits: List[Edit]) -> str:
+        # text == source, więc edycje na doc.text aplikujemy wprost i to jest już źródło.
+        return apply_edits_to_text(doc.text, edits)
+
+
+def load(source: str, adapter: Optional[InputAdapter] = None) -> NormalizedDoc:
+    """Wygodny wrapper: normalizuje źródło wskazanym adapterem (domyślnie `PlainTextAdapter`)."""
+    return (adapter or PlainTextAdapter()).normalize(source)

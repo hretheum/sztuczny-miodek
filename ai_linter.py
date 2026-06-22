@@ -24,6 +24,11 @@ import glob
 from dataclasses import dataclass
 from typing import Callable, List, Tuple
 
+# Katalog skryptu na ścieżce importu (linter wołany ścieżką bezwzględną z dowolnego cwd),
+# by `import adapter` działał niezależnie od bieżącego katalogu — tak jak RULES_PATH względem __file__.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import adapter  # noqa: E402 — domyślny adapter wejścia/wyjścia (C1, wierny podział akapitów)
+
 
 # ---------------------------------------------------------------------------
 # KATALOG MARKERÓW — ładowany z pliku danych rules.json (Epik A: „Reguła jako dane").
@@ -178,14 +183,14 @@ def get_line_number(text: str, pos: int) -> int:
 
 
 def split_paragraphs(text: str) -> List[Tuple[int, str]]:
-    """Zwraca listę (offset_start, paragraph_text)."""
-    paras = re.split(r"\n\s*\n", text)
-    result = []
-    offset = 0
-    for p in paras:
-        result.append((offset, p))
-        offset += len(p) + 2  # przybliżony offset (dwie nowe linie)
-    return result
+    """Zwraca listę (offset_start, paragraph_text).
+
+    Od C1 (KAN-190) offset jest WIERNY — wyznaczony przez adapter (segmenter z `finditer` po
+    separatorach), a nie przybliżany sumą `+2`. Granice akapitów identyczne jak historyczny
+    `re.split(r"\\n\\s*\\n", text)`; różnica tylko w poprawności offsetu przy nieregularnych
+    odstępach („\\n \\n", „\\n\\n\\n"). API (lista (offset, tekst)) bez zmian — konsumenci niezmienieni.
+    """
+    return [(s.start, s.text) for s in adapter.split_paragraphs_faithful(text)]
 
 
 def detect_svo_rhythm(text: str) -> List[Tuple[int, str]]:
