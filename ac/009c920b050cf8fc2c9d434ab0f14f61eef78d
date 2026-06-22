@@ -1,0 +1,28 @@
+ai_linter.py
+  s_b1f4aea171d2c2::t_ac566a67aa6ea4 399
+adapter.py
+  s_b1f4aea171d2c2::t_8359bb386f0f8f 519-520,522-525,533-539,543,548-549
+  s_b1f4aea171d2c2::t_f6c68159308df4 460-462,469-471,474-477,490-495
+docs/ADAPTER-INTERFACE.md
+  s_b1f4aea171d2c2::t_3b13b3caf70695 145-146
+tools/measure_html.py
+  s_b1f4aea171d2c2::t_9e787a51611348 86-103
+tests/run_tests.sh
+  s_b1f4aea171d2c2::t_9421d47deb9809 66-67,70
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "ac009c920b050cf8fc2c9d434ab0f14f61eef78d",
+  "prompts": {},
+  "sessions": {
+    "s_b1f4aea171d2c2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "adfe49fb-2db9-454f-8881-22f8870c2ccc",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "<eryk@talentcanvas.tech>"
+    }
+  }
+}
