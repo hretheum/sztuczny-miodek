@@ -63,6 +63,13 @@ else
   echo "FAIL adapter Markdown — ekstrakcja prozy / zerowanie kodu rozjechało się (patrz wyżej)"; fail=1
 fi
 
+echo "== Adapter strukturalny: granice akapitów z HTML (C4 szkielet) =="
+if python3 "$DIR/../tools/measure_structural.py"; then
+  : # OK — komunikat wypisuje sam skrypt
+else
+  echo "FAIL adapter strukturalny — ekstrakcja prozy z HTML rozjechała się (patrz wyżej)"; fail=1
+fi
+
 if [[ $fail -eq 0 ]]; then
   echo "WSZYSTKIE TESTY PRZESZŁY."
 else

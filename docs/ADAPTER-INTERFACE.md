@@ -128,9 +128,41 @@ taki marker wewnątrz bloku kodu wciąż może dać trafienie klasy `review` —
 zmienia werdyktu (review nie liczy się do blokerów). To zachowanie 1:1 sprzed C3 (nie regresja);
 pełne odsianie kodu również dla markerów deklaratywnych to domena Stage 2 (osąd LLM).
 
-## Plan wdrożenia (kolejne zadania Epiku C)
+## Adapter formatu strukturalnego (C4, opcjonalny — szkielet)
 
-- **C4** — adapter formatu strukturalnego (opcjonalny).
+`StructuralAdapter` (HTML / storage wiki) — lekki, czysty Python (`html.parser` ze stdlib, zero-dep).
+Po co: storage wiki (np. Confluence) i HTML wyznaczają granice akapitów ZNACZNIKAMI (`<p>`, `<li>`,
+`<h1-6>`, `<div>`…), nie pustymi liniami. Podział tekstowy zlewa wtedy dokument w jeden akapit →
+myślniki/bold z różnych `<p>` liczone razem = fałszywy em-dash overuse (realny powód FP przy
+audycie stron wiki).
 
-Zrealizowane: C1 (interfejs + PlainTextAdapter + podział akapitów), C2 (segmenter zdań +
-skróty), C3 (adapter Markdown — świadomość kodu). Wszystkie bez regresji na korpusie.
+Co robi szkielet (rdzeń działa, gate `tools/measure_structural.py`):
+- granice akapitów ze znaczników blokowych (separator `\n\n` na start/koniec bloku),
+- ekstrakcja prozy; zawartość `code`/`pre`/`script`/`style` pomijana (jak bloki kodu w MD),
+- `source_map` (proza→źródło) — **pierwszy adapter z nietożsamym mapowaniem**, bo usuwanie tagów
+  zmienia długość; `to_source_offset` wskazuje pozycję w oryginale (dla zapisu zwrotnego),
+- segmenty `paragraph` z wiernym podziałem na wyekstrahowanej prozie.
+
+Dowód (zweryfikowany): HTML z 4 `<p>` po 1 myślniku → PlainText zlewa w 1 akapit z 4 myślnikami =
+em-dash overuse (FP); StructuralAdapter rozdziela na 4 akapity = brak FP.
+
+NIE wpięty do produkcyjnej ścieżki `scan_file` (`collect_files` obsługuje `.md`/`.txt`; HTML to
+osobny typ wejścia). Wpięcie = przyszły krok; linter nietknięty.
+
+### Plan rozbudowy (do pełnego adaptera)
+1. **Wpięcie wejścia**: rozszerzyć `collect_files` o `.html`/`.htm`/`.xhtml` + `_select_adapter`
+   o routing do `StructuralAdapter`; smoke na realnych eksportach wiki.
+2. **OutputAdapter (zapis zwrotny)**: edycje prozy → źródło HTML przez `source_map` (kotwice
+   odcinkami liniowe; dziś `StructuralAdapter` jest tylko `InputAdapter`).
+3. **Pełniejsze pokrycie**: zagnieżdżone tabele/listy, atrybuty `alt`/`title` jako proza, encje
+   brzegowe, `<br>` jako miękka granica, segmenty `block` dla struktur (jak w Markdown C3).
+4. **Confluence storage**: obsługa `<ac:*>`/`<ri:*>` (makra) jako bloków nie-prozy.
+5. **Korpus + gate**: zestaw stron wiki z zasianymi tellami (jak GROUND_TRUTH) + pomiar precyzji.
+
+## Status Epiku C
+
+Zrealizowane bez regresji na korpusie:
+- **C1** — interfejs + PlainTextAdapter + podział akapitów.
+- **C2** — segmenter zdań + skróty/inicjały.
+- **C3** — adapter Markdown (świadomość kodu, segmenty block, routing wg rozszerzenia).
+- **C4** — adapter strukturalny HTML/wiki: szkielet (granice ze struktury, source_map) + plan rozbudowy.

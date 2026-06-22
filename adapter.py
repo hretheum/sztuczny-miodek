@@ -418,6 +418,105 @@ class MarkdownAdapter(InputAdapter, OutputAdapter):
         return apply_edits_to_text(doc.source, edits)
 
 
+# ---------------------------------------------------------------------------
+# Adapter formatu strukturalnego (C4, opcjonalny) — HTML / storage wiki
+# ---------------------------------------------------------------------------
+#
+# Po co: storage stron wiki (np. Confluence) i HTML wyznaczają granice akapitów ZNACZNIKAMI
+# (<p>, <li>, <h1-6>, <div>…), a NIE pustymi liniami. Podział tekstowy (PlainText/Markdown)
+# zlewa wtedy cały dokument w jeden akapit → myślniki/bold z RÓŻNYCH <p> liczone razem =
+# fałszywy em-dash overuse (realny powód FP przy audycie stron wiki).
+#
+# Ten adapter używa `html.parser` ze STDLIB (zero-dep — bez ciężkiej biblioteki HTML). Ekstrahuje
+# tekst, wstawiając granicę akapitu („\n\n") na znacznikach blokowych, oraz buduje `source_map`
+# (proza→źródło), bo usuwanie tagów ZMIENIA długość — to pierwszy adapter z nietożsamym mapowaniem.
+#
+# STATUS: działający SZKIELET (brief: „jeśli zakres za duży, dostarczyć szkielet + plan").
+# Pokrywa rdzeń (granice akapitów ze struktury, ekstrakcja prozy, source_map, segmenty block/
+# paragraph). Plan rozbudowy w docs/ADAPTER-INTERFACE.md. NIE wpięty do produkcyjnej ścieżki
+# scan_file (collect_files obsługuje .md/.txt; HTML to osobny typ wejścia — wpięcie = przyszły krok).
+
+import html as _html
+from html.parser import HTMLParser as _HTMLParser
+
+# Znaczniki blokowe HTML — ich start/koniec wyznacza granicę akapitu prozy.
+_HTML_BLOCK_TAGS = frozenset({
+    "p", "div", "li", "ul", "ol", "h1", "h2", "h3", "h4", "h5", "h6",
+    "blockquote", "tr", "td", "th", "table", "section", "article", "header",
+    "footer", "pre", "br", "hr",
+})
+# Znaczniki, których ZAWARTOŚĆ to nie proza (jak bloki kodu w MD) — pomijana.
+_HTML_SKIP_CONTENT_TAGS = frozenset({"code", "pre", "script", "style"})
+
+
+class _ProseHTMLParser(_HTMLParser):
+    """Zbiera prozę z HTML: tekst + mapowanie (offset_w_prozie → offset_w_źródle).
+
+    Na znacznikach blokowych wstawia separator akapitu. Zawartość code/pre/script/style pomija.
+    `source_map` to lista kotwic (offset_text, offset_source) wystarczająca do `to_source_offset`."""
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.parts: List[str] = []
+        self.text_len = 0
+        self.source_map: List[Tuple[int, int]] = []
+        self._skip_depth = 0
+
+    def handle_starttag(self, tag, attrs):
+        if tag in _HTML_SKIP_CONTENT_TAGS:
+            self._skip_depth += 1
+        if tag in _HTML_BLOCK_TAGS and self.parts and not self.parts[-1].endswith("\n\n"):
+            self.parts.append("\n\n")
+            self.text_len += 2
+
+    def handle_endtag(self, tag):
+        if tag in _HTML_SKIP_CONTENT_TAGS and self._skip_depth > 0:
+            self._skip_depth -= 1
+        if tag in _HTML_BLOCK_TAGS and self.parts and not self.parts[-1].endswith("\n\n"):
+            self.parts.append("\n\n")
+            self.text_len += 2
+
+    def handle_data(self, data):
+        if self._skip_depth > 0:
+            return
+        # kotwica: bieżąca pozycja w prozie ↔ pozycja danych w źródle (getpos → wiersz/kol → offset)
+        src_off = self._current_source_offset()
+        self.source_map.append((self.text_len, src_off))
+        self.parts.append(data)
+        self.text_len += len(data)
+
+    # offset źródłowy bieżącego tokenu (z numeru wiersza/kolumny parsera)
+    _raw = ""
+
+    def _current_source_offset(self) -> int:
+        line, col = self.getpos()
+        # zsumuj długości poprzednich wierszy + kolumna
+        lines = self._raw.split("\n")
+        return sum(len(l) + 1 for l in lines[: line - 1]) + col
+
+
+class StructuralAdapter(InputAdapter):
+    """Adapter formatu strukturalnego (C4): HTML / storage wiki. Lekki, czysty Python (html.parser).
+
+    Wyznacza granice akapitów ze ZNACZNIKÓW blokowych (nie z pustych linii), ekstrahuje prozę i
+    buduje `source_map` (proza→źródło) — bo usuwanie tagów zmienia długość. Segmenty: `paragraph`
+    (proza). Zawartość code/pre/script/style pomijana. SZKIELET: rdzeń działa; pełne pokrycie
+    (zagnieżdżone tabele, encje brzegowe, atrybuty alt/title) — plan w docs."""
+
+    def normalize(self, raw: str) -> NormalizedDoc:
+        parser = _ProseHTMLParser()
+        parser._raw = raw
+        parser.feed(raw)
+        parser.close()
+        text = "".join(parser.parts)
+        return NormalizedDoc(
+            text=text,
+            source=raw,
+            segments=split_paragraphs_faithful(text),
+            source_map=parser.source_map,
+        )
+
+
 def load(source: str, adapter: Optional[InputAdapter] = None) -> NormalizedDoc:
     """Wygodny wrapper: normalizuje źródło wskazanym adapterem (domyślnie `PlainTextAdapter`)."""
     return (adapter or PlainTextAdapter()).normalize(source)
