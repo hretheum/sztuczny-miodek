@@ -41,11 +41,20 @@ zachowanie lintera (zero zmiany). Wczytywany flagą `--dict <ścieżka>`.
 
 ## Styk z resztą Epiku D
 
-- **D3 (build-dict)**: zbuduje zalążek słownika z korpusu (częste terminy domenowe → kandydaci do `allow`).
+- **D3 (build-dict)** — ZREALIZOWANE: `tools/build_dict.py` buduje SZKIC słownika z korpusu.
+  Zasada „częstość proponuje, kanon wetuje, człowiek zatwierdza": terminy częste i o szerokim
+  rozrzucie → `review`; AI-telle/kalki (łapane przez markery lintera) wetowane (do `_vetoed_by_canon`,
+  informacyjnie); `allow` PUSTE — operator ręcznie przenosi zaakceptowane z `review` do `allow`.
+  Opcjonalny `--wordlist` odsiewa słowa ogólne. Szkic jest poprawnym plikiem D2 (wczytywalnym przez
+  `load_dictionary`); pole `_vetoed_by_canon` jest ignorowane przez loader.
 - **D4 (log decyzji)**: akceptacje/odrzucenia operatora zasilą `allow`/`review` + `provenance`.
 
 ## Użycie
 
 ```bash
+# D2 — linter ze słownikiem:
 python3 ai_linter.py --lang en --dict dictionary.example.json plik.txt
+
+# D3 — zbuduj szkic słownika z korpusu (do akceptacji człowieka):
+python3 tools/build_dict.py KORPUS/ --wordlist slowa_ogolne.txt --out szkic.json --projekt moj-projekt
 ```

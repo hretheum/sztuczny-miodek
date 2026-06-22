@@ -49,6 +49,13 @@ else
   echo "FAIL słownik — format/classify/fallback rozjechał się (patrz wyżej)"; fail=1
 fi
 
+echo "== build-dict: częstość proponuje, kanon wetuje, allow puste (D3) =="
+if python3 "$DIR/../tools/check_build_dict.py"; then
+  : # OK — komunikat wypisuje sam skrypt
+else
+  echo "FAIL build-dict — ekstrakcja/veto kanonu/format szkicu rozjechał się (patrz wyżej)"; fail=1
+fi
+
 echo "== Recall triady: PL-RHET/EN-TRIAD na tests/triad_eval.md (B1) =="
 if python3 "$DIR/../tools/measure_triad.py" --min-recall 1.0; then
   : # OK — komunikat wypisuje sam skrypt
