@@ -199,18 +199,17 @@ def detect_svo_rhythm(text: str) -> List[Tuple[int, str]]:
     (min 3 znaki, case-insensitive).
     Zwraca listę (line_number, fragment).
     """
-    sentences = re.split(r"[.!?]+", text)
+    # Wierny podział zdań (C2): offset każdego zdania wyznaczony przez adapter (finditer), a nie
+    # przybliżany `pos += len(sent)+1` — poprawny też dla wieloznacznych separatorów („?!", „...").
+    # Granice zdań i pozycje identyczne jak historyczny re.split na korpusie (zero regresji).
     hits = []
-    # Zbierz pierwsze tokeny zdań z ich pozycjami
     tokens = []
-    pos = 0
-    for sent in sentences:
-        stripped = sent.strip()
+    for seg in adapter.split_sentences_faithful(text):
+        stripped = seg.text.strip()
         if stripped:
             words = re.findall(r"\w+", stripped)
             if words and len(words[0]) >= 3:
-                tokens.append((words[0].lower(), pos, stripped[:60]))
-        pos += len(sent) + 1  # +1 za separator
+                tokens.append((words[0].lower(), seg.start, stripped[:60]))
 
     # Szukaj 3 z rzędu z tym samym tokenem
     i = 0

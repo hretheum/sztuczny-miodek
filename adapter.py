@@ -196,6 +196,33 @@ def split_paragraphs_faithful(text: str) -> List[Segment]:
     return segments
 
 
+# Separator zdania: sekwencja . ! ? (wieloznakowa „?!", „..." traktowana jako jeden separator).
+# Historyczny detect_svo_rhythm robił re.split(r"[.!?]+") + przybliżenie `pos += len(sent) + 1`
+# (zakłada 1-znakowy separator → rozjazd przy „?!"/„..."). Tu offset KAŻDEGO zdania liczony WPROST.
+_SENT_SEP_RE = _re.compile(r"[.!?]+")
+
+
+def split_sentences_faithful(text: str) -> List[Segment]:
+    """Wierny podział na zdania: każdy `Segment` zna dokładny [start, end) i numer linii.
+
+    Niezmiennik: `text[seg.start:seg.end] == seg.text`. Granice zdań identyczne jak historyczny
+    `re.split(r"[.!?]+", text)` (fragmenty MIĘDZY separatorami, włącznie z pustymi na brzegach),
+    ale offset jest wyznaczony przez `finditer` — poprawny też dla wieloznakowych separatorów
+    („?!", „...") tam, gdzie stare `pos += len(sent)+1` się rozjeżdżało. `text` segmentu to surowy
+    wycinek (bez `.strip()`), by zachować zgodność pozycji z konsumentem (detect_svo_rhythm)."""
+    segments: List[Segment] = []
+    starts_ends: List[Tuple[int, int]] = []
+    pos = 0
+    for m in _SENT_SEP_RE.finditer(text):
+        starts_ends.append((pos, m.start()))
+        pos = m.end()
+    starts_ends.append((pos, len(text)))
+    for start, end in starts_ends:
+        line = text.count("\n", 0, start) + 1
+        segments.append(Segment("sentence", text[start:end], start, end, line=line))
+    return segments
+
+
 class PlainTextAdapter(InputAdapter, OutputAdapter):
     """Domyślny adapter: traktuje źródło jako czysty tekst (markdown-lite — bez przekształceń).
 

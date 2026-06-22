@@ -67,10 +67,25 @@ różnica tylko w POPRAWNOŚCI offsetu przy nieregularnych odstępach. Dowód br
 lintera bajt-w-bajt identyczne vs przed wpięciem (6/6 kombinacji lang × format na korpusie),
 `run_tests.sh` zielone (werdykty + oba gate recall), `check_id_consistency` OK.
 
+## Segmenter zdań (C2)
+
+`split_sentences_faithful(text)` — wierny podział na zdania (segmenty `sentence`): offset każdego
+zdania wyznaczony przez `finditer` po separatorach `[.!?]+`, zamiast historycznego przybliżenia
+`pos += len(sent) + 1`. Niezmiennik `text[s.start:s.end] == s.text`; `text` segmentu to surowy
+wycinek (bez `.strip()`), by pozycja zgadzała się z konsumentem.
+
+**Wpięcie:** `detect_svo_rhythm` używa teraz `adapter.split_sentences_faithful` zamiast
+`re.split(r"[.!?]+")` + ręcznego liczenia `pos`. Logika detekcji (3 zdania z tym samym tokenem
+otwierającym, ≥3 znaki) bez zmian. Granice zdań i pozycje identyczne jak historyczny `re.split`
+na korpusie; różnica tylko w POPRAWNOŚCI offsetu przy wieloznacznych separatorach („?!", „...")
+— gdzie stary kod dawał offset niewierny (np. 10/18/27 zamiast 11/19/30).
+
+Po C2 linter NIE ma już żadnego `re.split` do podziału tekstu — cały podział (akapity + zdania)
+idzie przez wierny adapter. Dowód braku regresji: wyjście bajt-w-bajt identyczne vs przed
+wpięciem (6/6 kombinacji), `run_tests.sh` + oba gate recall + `check_id_consistency` zielone.
+
 ## Plan wdrożenia (kolejne zadania Epiku C)
 
-- **C2** — lekki segmenter ZDAŃ (wierny, z offsetami): zastąpi przybliżony podział zdań w
-  `detect_svo_rhythm` (`pos += len(sent) + 1`). Wypełni segmenty `sentence`.
 - **C3** — adapter Markdown: `normalize` (MD → proza, kotwice w `source_map`) + `write_back`
   zachowujący strukturę MD.
 - **C4** — adapter formatu strukturalnego (opcjonalny).
