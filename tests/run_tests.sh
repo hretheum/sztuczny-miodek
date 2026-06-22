@@ -35,6 +35,13 @@ else
   echo "FAIL spójność ID — rozjazd identyfikatorów (patrz wyżej)"; fail=1
 fi
 
+echo "== Recall triady: PL-RHET/EN-TRIAD na tests/triad_eval.md (B1) =="
+if python3 "$DIR/../tools/measure_triad.py" --min-recall 1.0; then
+  : # OK — komunikat wypisuje sam skrypt
+else
+  echo "FAIL recall triady — zawężenie wzorca przeoczyło realną triadę (patrz wyżej)"; fail=1
+fi
+
 if [[ $fail -eq 0 ]]; then
   echo "WSZYSTKIE TESTY PRZESZŁY."
 else
