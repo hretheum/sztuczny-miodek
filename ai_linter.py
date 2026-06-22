@@ -4,6 +4,13 @@ ai_linter.py — deterministyczny linter manieryzmu AI (stage-1 pre-scan, 0 toke
 Katalog markerów ładowany z pliku danych rules.json (Epik A: „Reguła jako dane"; schemat: rules.schema.md).
 Lustro taksonomii z manieryzm-ai.md — przy zmianie synchronizuj rules.json i dokument (te same ID).
 
+Dwa rozłączne rodzaje reguł (czysty rozdział, A5):
+  - DEKLARATYWNE — czyste regexy z rules.json (→ MARKER_DEFS → compile_markers, jedna pętla finditer).
+  - PROCEDURALNE — progi/logika niewyrażalne regexem; funkcje detect_* wołane PO IDENTYFIKATORZE
+    przez DETECTOR_REGISTRY / run_procedural_detector. ID proceduralne: PL-RHYTHM, PL-TYPO, EN-DASH.
+    Z założenia NIE wchodzą do rules.json (regex = dane, detektor = kod z progiem).
+    Kontrakt: patrz DETECTOR_REGISTRY niżej oraz sekcja „Detektory proceduralne (kontrakt)" w manieryzm-ai.md.
+
 Użycie:
     python3 ai_linter.py [--lang {pl,en,both}] [--format {manifest,json}] ścieżka [...]
 """
