@@ -13,6 +13,12 @@ Generatorowa antyteza inwersyjna: redefinicja przez kontrast w ramie „To (jest
 „X to Y, nie Z" (forma B), lub przeciwstawne „a nie". Naturalna korekta: poprawka faktu, miejsca,
 czasu, sprawcy lub para wyboru („herbatę, nie kawę") — informacja, nie figura.
 
+ZNANE OGRANICZENIE (korekty faktualne): konstrukcja „X to Y, nie Z" bywa naturalną korektą faktu
+(„Termin to piątek, nie środa", „Piotr to kierownik, nie pracownik") — strukturalnie identyczna z
+redefinicją, nieusuwalna bez analizy części mowy. Wzorzec odsiewa tanie sygnały (dni tygodnia, liczby
+w orzeczniku), ale korekty z rzeczownikiem pospolitym pozostają jako FP. Te przypadki SĄ w zestawie
+jako FP (bramka dwukierunkowa wychwyci przyszły wzrost FP); ostateczny osąd należy do Stage 2.
+
 Konsumowany przez `tools/measure_antithesis.py`. Linie `#`/puste pomijane; sekcja `## PL`.
 
 ## PL
@@ -32,7 +38,15 @@ TP | Sprint to horyzont, nie wyścig.
 TP | Kod to komunikacja, nie magia.
 TP | Refaktor to inwestycja, nie koszt.
 TP | Onboarding to proces, nie wydarzenie.
+TP | Ten model to asystent, nie wyrocznia.
+TP | Dobry plan to fundament, nie ozdoba.
+TP | Model językowy to narzędzie, nie magia.
+TP | Kupowanie to wydatek, nie inwestycja.
+TP | Pamiętanie to proces, nie dar.
 FP | Proszę przyjść we wtorek, nie w środę.
+FP | Termin to piątek, nie środa.
+FP | Spotkanie to wtorek, nie poniedziałek.
+FP | Deadline to 15, nie 20.
 FP | Mam dwa koty, nie psy.
 FP | Zostaw to tutaj, nie ruszaj.
 FP | Powiedział, że nie przyjdzie.
@@ -42,6 +56,7 @@ FP | Pamiętaj to zadanie, nie tamto.
 FP | To zadanie zrobił Jan, nie Marek.
 FP | Wiem, że nie zdążymy.
 FP | Obawiam się, że nie.
+FP | Piotr to kierownik, nie pracownik.
 C | Liczy się sygnał, nie hałas.
 C | Pomiar nie ocenia, mierzy.
 C | Budujemy systemy, nie piszemy izolowanego kodu.
