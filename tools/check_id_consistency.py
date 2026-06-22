@@ -39,7 +39,11 @@ DOC_PATH = os.path.join(REPO_ROOT, "manieryzm-ai.md")
 sys.path.insert(0, REPO_ROOT)
 import ai_linter  # noqa: E402
 
-ID_RE = r"[A-Z]{2,}-[A-Z]+"
+# Wzorzec ID markera — TYLKO realne prefiksy taksonomii: PL- / EN-.
+# Celowo zawężony (nie [A-Z]{2,}-[A-Z]+), by parsowanie dokumentu nie złapało przypadkiem
+# tokenów typu FAIL-HARD, AI-CV, EN-DASH-podobnych obcych ciągów, gdy dokument ewoluuje.
+# Jeśli kiedyś dojdzie nowy prefiks językowy (np. DE-), dopisz go tutaj świadomie.
+ID_RE = r"(?:PL|EN)-[A-Z]+"
 
 
 def ids_from_rules() -> set:
