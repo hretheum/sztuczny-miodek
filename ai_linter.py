@@ -22,7 +22,7 @@ import json
 import argparse
 import glob
 from dataclasses import dataclass
-from typing import List, Tuple
+from typing import Callable, List, Tuple
 
 
 # ---------------------------------------------------------------------------
@@ -355,7 +355,7 @@ def _proc_connector(text: str, eff_lang: str) -> List[Tuple[int, str, str, str]]
 
 
 # Kolejność jak w historycznym scan_file: emdash → emoji → bold → svo → connector.
-DETECTOR_REGISTRY: List[Tuple[str, "callable"]] = [
+DETECTOR_REGISTRY: List[Tuple[str, Callable[[str, str], List[Tuple[int, str, str, str]]]]] = [
     ("emdash-overuse", _proc_emdash),
     ("emoji-in-heading", _proc_emoji_heading),
     ("bold-overload", _proc_bold),
@@ -408,7 +408,7 @@ def scan_file(filepath: str, compiled_markers, lang_filter: str) -> Tuple[List[H
             emdash_max = cnt
 
     # --- Detektory PROCEDURALNE (wołane po identyfikatorze z DETECTOR_REGISTRY) ---
-    # Dla EN: EN-DASH em-dash, dla PL/both: PL-TYPO. Próg/logika żyją w funkcjach detect_*;
+    # Em-dash: dla EN → ID EN-DASH; dla PL/both → ID PL-TYPO. Próg/logika żyją w funkcjach detect_*;
     # tutaj tylko iterujemy rejestr w ustalonej kolejności i mapujemy klasę → blockers.
     eff_lang = lang_filter if lang_filter != "both" else "pl"  # domyślnie PL dla both
     for detector_id, _adapter in DETECTOR_REGISTRY:
