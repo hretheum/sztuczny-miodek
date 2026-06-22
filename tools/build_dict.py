@@ -54,10 +54,12 @@ def load_wordlist(path):
         return {ln.strip().lower() for ln in f if ln.strip() and not ln.startswith("#")}
 
 
-def extract_candidates(paths, min_count, min_files):
+def extract_candidates(paths, min_count, min_files, bigrams=True):
     """Zwraca {termin: (liczba_wystąpień, liczba_plików)} dla terminów spełniających progi.
 
-    Częstość = suma wystąpień; rozrzut = liczba różnych plików (chroni przed terminem z 1 pliku)."""
+    Kandydaci = pojedyncze tokeny ORAZ krótkie n-gramy (bigramy sąsiednich tokenów, jeśli
+    `bigrams`), bo terminy domenowe bywają wielowyrazowe („design system"). Częstość = suma
+    wystąpień; rozrzut = liczba różnych plików (chroni przed terminem z jednego pliku)."""
     total = Counter()
     files_with = Counter()
     n_files = 0
@@ -67,11 +69,16 @@ def extract_candidates(paths, min_count, min_files):
             text = open(fp, "r", encoding="utf-8", errors="replace").read()
         except OSError:
             continue
+        toks = [m.group(0).lower() for m in _TOKEN_RE.finditer(text)]
         seen = set()
-        for m in _TOKEN_RE.finditer(text):
-            t = m.group(0).lower()
+        for t in toks:
             total[t] += 1
             seen.add(t)
+        if bigrams:
+            for a, b in zip(toks, toks[1:]):
+                bg = f"{a} {b}"
+                total[bg] += 1
+                seen.add(bg)
         for t in seen:
             files_with[t] += 1
     candidates = {

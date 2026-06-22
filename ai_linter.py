@@ -682,15 +682,19 @@ def main():
             sys.exit(2)
 
     # D2: jeśli wskazano --dict, wczytaj słownik domenowy (warstwa nadrzędna terminów).
+    # [D2-review 5a] JAWNY --dict na nieistniejący plik → BŁĄD + exit 2 (literówka ścieżki nie ma
+    # po cichu zniknąć). Odróżniamy od „brak słownika jako fallback" (gdy --dict W OGÓLE niepodany —
+    # wtedy DICTIONARY zostaje None i działa obecne zachowanie).
     if args.dict is not None:
         global DICTIONARY
+        if not os.path.exists(args.dict):
+            print(f"[ERROR] Wskazany słownik nie istnieje: {args.dict}", file=sys.stderr)
+            sys.exit(2)
         try:
             DICTIONARY = dictionary.load_dictionary(args.dict)
         except ValueError as e:
             print(f"[ERROR] {e}", file=sys.stderr)
             sys.exit(2)
-        if DICTIONARY is None:
-            print(f"[WARN] Słownik nie istnieje: {args.dict} — kontynuuję bez słownika.", file=sys.stderr)
 
     files = collect_files(args.paths)
     if not files:

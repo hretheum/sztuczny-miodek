@@ -27,6 +27,10 @@ zachowanie lintera (zero zmiany). Wczytywany flagą `--dict <ścieżka>`.
 
 - Case-insensitive, jako CAŁE SŁOWO (granica na znakach nie-słownych, z polskimi literami w klasie
   „słowo"). Np. `allow: ["robust"]` łapie „robust", ale NIE „robustness".
+- DYWIZ (`-`) JEST GRANICĄ SŁOWA: termin w słowie złożonym przez dywiz dopasowuje się. Np.
+  `allow: ["robust"]` łapie „pre-robust", „non-robust", „robust-ish" (segment „robust" odcięty
+  dywizem), ale NIE „robustness" (litery przylegają, brak granicy). Świadome — pozwala dopuścić
+  rdzeń terminu w złożeniach branżowych bez wymieniania każdej formy.
 - Wyrażenia wielowyrazowe dozwolone (np. „design system").
 - Termin dopasowywany wewnątrz `match_fragment` trafienia markera DEKLARATYWNEGO (regex z rules.json).
   Detektory PROCEDURALNE (em-dash, bold, SVO, connector, emoji) operują na strukturze, nie na
