@@ -1,0 +1,22 @@
+ai_linter.py
+  s_b1f4aea171d2c2::t_3a7b0e461fc1f9 299-371
+  s_b1f4aea171d2c2::t_2be5898e7bf770 403-405,407-411
+manieryzm-ai.md
+  s_b1f4aea171d2c2::t_67c4e60388add4 254-293
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "f412aeaa2964caebca865eb4713777c61e35cc53",
+  "prompts": {},
+  "sessions": {
+    "s_b1f4aea171d2c2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "adfe49fb-2db9-454f-8881-22f8870c2ccc",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "<eryk@talentcanvas.tech>"
+    }
+  }
+}
