@@ -242,7 +242,7 @@ def detect_connector_overload(text: str) -> List[Tuple[int, str]]:
     return []
 
 
-_NON_PROSE_RE = re.compile(r"^\s*(?:#{1,6}\s|[-*+]\s|\d+\.\s|>|\[[ x]\])")
+_NON_PROSE_RE = re.compile(r"^\s*(?:#{1,6}\s|[-*+]\s|\d+\.\s|>|\[[ xX]\])")
 
 
 def _prose_only(para: str) -> str:
