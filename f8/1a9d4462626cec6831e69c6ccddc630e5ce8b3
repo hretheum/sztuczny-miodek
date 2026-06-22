@@ -1,0 +1,20 @@
+docs/THRESHOLD-CALIBRATION.md
+  s_b1f4aea171d2c2::t_4ed40c61d51e17 58-79
+  s_b1f4aea171d2c2::t_951e901651126a 114,116-128
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "f81a9d4462626cec6831e69c6ccddc630e5ce8b3",
+  "prompts": {},
+  "sessions": {
+    "s_b1f4aea171d2c2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "adfe49fb-2db9-454f-8881-22f8870c2ccc",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "<eryk@talentcanvas.tech>"
+    }
+  }
+}
