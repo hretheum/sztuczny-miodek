@@ -1,0 +1,20 @@
+ai_linter.py
+  s_b1f4aea171d2c2::t_5e1f28d487c45a 47-50
+  s_b1f4aea171d2c2::t_82f8364bd494ab 71-79
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "ca703cac5bb88e3749e296d0bf7c4f6007457116",
+  "prompts": {},
+  "sessions": {
+    "s_b1f4aea171d2c2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "adfe49fb-2db9-454f-8881-22f8870c2ccc",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "<eryk@talentcanvas.tech>"
+    }
+  }
+}
