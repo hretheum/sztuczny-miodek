@@ -363,6 +363,12 @@ DETECTOR_REGISTRY: List[Tuple[str, Callable[[str, str], List[Tuple[int, str, str
     ("connector-overload", _proc_connector),
 ]
 
+# Zbiór ID markerów emitowanych przez detektory PROCEDURALNE (nie z rules.json).
+# Jawnie deklarowany, by test spójności (A4) nie musiał odpalać detektorów na próbkach.
+# PL-TYPO występuje też wśród deklaratywnych (em-dash/emoji/bold to PL-TYPO); PL-RHYTHM i
+# EN-DASH są wyłącznie proceduralne. Pełny katalog ID = deklaratywne ∪ PROCEDURAL_MARKER_IDS.
+PROCEDURAL_MARKER_IDS = frozenset({"PL-TYPO", "EN-DASH", "PL-RHYTHM"})
+
 
 def run_procedural_detector(detector_id: str, text: str, eff_lang: str) -> List[Tuple[int, str, str, str]]:
     """Uruchamia pojedynczy detektor proceduralny PO IDENTYFIKATORZE (detector_id z rejestru).
