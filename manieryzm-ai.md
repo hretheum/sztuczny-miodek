@@ -296,7 +296,7 @@ Adapter jest cienkim wrapperem nad funkcją `detect_*` — progi i logika żyją
 > **Źródło prawdy regexów.** Poniższy katalog (sekcja ujęta w znaczniki „RULES:START" / „RULES:END") jest JEDYNYM miarodajnym źródłem wzorców regex — generowany automatycznie z `rules.json` przez `tools/gen_doc_catalog.py`. Listy „Wzorce techniczne" przy poszczególnych kategoriach wyżej mają charakter wyłącznie opisowy i mogą być NIEKOMPLETNE względem `rules.json` (do czasu pełnej konsolidacji). W razie rozbieżności rozstrzyga ten katalog.
 
 <!-- RULES:START -->
-Sekcja wygenerowana automatycznie z `rules.json` przez `tools/gen_doc_catalog.py` — nie edytuj ręcznie. Liczba reguł regexowych: 47 w 13 kategoriach.
+Sekcja wygenerowana automatycznie z `rules.json` przez `tools/gen_doc_catalog.py` — nie edytuj ręcznie. Liczba reguł regexowych: 48 w 13 kategoriach.
 
 ### PL-SIGN — PL — klasa: review
 
@@ -346,7 +346,8 @@ Sekcja wygenerowana automatycznie z `rules.json` przez `tools/gen_doc_catalog.py
 | Opis | Wzorzec (regex) |
 |---|---|
 | antyteza: X, a nie Y | `,\s+a nie\b` |
-| antyteza inwersyjna: To X, nie Y (rama definicyjna; zawężona vs naturalne korekty — nie łapie „herbatę, nie kawę") | `(?:(?<=^)\|(?<=[.!?;:\n]))\s*to (?:jest \|są )?[^.,;!?\n]{2,40}?,\s+nie\s+(?-i:[a-ząćęłńóśźż]{3,})(?:\s+\w+)?(?=[.!?;\n]\|$)` |
+| antyteza inwersyjna forma A: To X, nie Y (rama definicyjna na początku klauzuli; zawężona vs naturalne korekty — nie łapie „herbatę, nie kawę") | `(?:(?<=^)\|(?<=[.!?;:\n]))\s*to (?:jest \|są )?[^.,;!?\n]{2,40}?,\s+nie\s+(?-i:[a-ząćęłńóśźż]{3,})(?:\s+\w+)?(?=[.!?;\n]\|$)` |
+| antyteza inwersyjna forma B: X to Y, nie Z (kopuła „to" z podmiotem niezaimkowym; lista częstych czasowników z „to"-dopełnieniem wykluczona — świadome ograniczenie, reszta = Stage 2) | `(?:(?<=^)\|(?<=[.!?;:\n]))\s*(?!(?:zostaw\|pamiętaj\|zrób\|zrobił\|zrobiła\|zrobili\|dostał\|dostała\|dostałem\|dostałam\|weź\|daj\|dał\|dała\|kup\|kupił\|rób\|robił\|miej\|napisz\|przeczytaj\|widzę\|widział\|lubię\|mam\|masz\|chcę\|wolę\|zostawiam\|pamięta)\w*\b)[A-Za-ząćęłńóśźżĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż]{2,} to (?-i:[a-ząćęłńóśźż]{3,})(?:\s+(?-i:[a-ząćęłńóśźż]{3,}))?,\s+nie\s+(?-i:[a-ząćęłńóśźż]{3,})(?=[.!?;\n]\|$)` |
 
 ### PL-HEDGE — PL — klasa: review
 

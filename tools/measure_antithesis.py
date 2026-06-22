@@ -44,7 +44,7 @@ def load_eval():
             continue
         label, _, text = s.partition("|")
         label = label.strip().upper()
-        if label in ("TP", "FP"):
+        if label in ("TP", "FP", "C"):
             items.append((label, text.strip()))
     return items
 
@@ -58,6 +58,9 @@ def main():
 
     tp = fp = fn = tn = 0
     fp_examples, fn_examples = [], []
+    # Forma C: poza zakresem regexu — liczona osobno, NIE wpływa na recall/precyzję (bramka).
+    c_total = c_caught = 0
+    c_caught_examples = []
     for label, text in items:
         h = hit(text)
         if label == "TP":
@@ -65,18 +68,25 @@ def main():
             if not h:
                 fn += 1
                 fn_examples.append(text)
-        else:
+        elif label == "FP":
             if h:
                 fp += 1
                 fp_examples.append(text)
             else:
                 tn += 1
+        else:  # label == "C" — znane ograniczenie, raport informacyjny
+            c_total += 1
+            if h:
+                c_caught += 1
+                c_caught_examples.append(text)
 
     precision = tp / (tp + fp) if (tp + fp) else 1.0
     recall = tp / (tp + fn) if (tp + fn) else 1.0
 
-    print(f"Antyteza PL-ANTI — zestaw {len(items)}: TP={tp} FP={fp} FN={fn} TN={tn}")
-    print(f"  precyzja = {precision:.0%}   recall = {recall:.0%}")
+    bramkowane = tp + fp + fn + tn
+    print(f"Antyteza PL-ANTI — bramkowane {bramkowane} (TP={tp} FP={fp} FN={fn} TN={tn}), "
+          f"forma C poza zakresem: {c_total}")
+    print(f"  precyzja = {precision:.0%}   recall = {recall:.0%}  (na formach A+B+'a nie')")
     if fp_examples:
         print("  pozostałe FP (naturalne korekty wciąż łapane):")
         for e in fp_examples:
@@ -85,6 +95,11 @@ def main():
         print("  FN (generatorowe antytezy przeoczone — regresja recall!):")
         for e in fn_examples:
             print(f"    - {e}")
+    print(f"  forma C (świadome ograniczenie, NIE bramkowana): {c_caught}/{c_total} złapane "
+          f"przy okazji; reszta = domena Stage 2.")
+    if c_caught_examples:
+        for e in c_caught_examples:
+            print(f"    ~ {e}")
 
     if "--min-recall" in sys.argv:
         min_recall = float(sys.argv[sys.argv.index("--min-recall") + 1])

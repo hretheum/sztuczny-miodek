@@ -207,7 +207,14 @@
     "lang": "pl",
     "klasa": "review",
     "pattern": "(?:(?<=^)|(?<=[.!?;:\\n]))\\s*to (?:jest |są )?[^.,;!?\\n]{2,40}?,\\s+nie\\s+(?-i:[a-ząćęłńóśźż]{3,})(?:\\s+\\w+)?(?=[.!?;\\n]|$)",
-    "opis": "antyteza inwersyjna: To X, nie Y (rama definicyjna; zawężona vs naturalne korekty — nie łapie „herbatę, nie kawę\")"
+    "opis": "antyteza inwersyjna forma A: To X, nie Y (rama definicyjna na początku klauzuli; zawężona vs naturalne korekty — nie łapie „herbatę, nie kawę\")"
+  },
+  {
+    "id": "PL-ANTI",
+    "lang": "pl",
+    "klasa": "review",
+    "pattern": "(?:(?<=^)|(?<=[.!?;:\\n]))\\s*(?!(?:zostaw|pamiętaj|zrób|zrobił|zrobiła|zrobili|dostał|dostała|dostałem|dostałam|weź|daj|dał|dała|kup|kupił|rób|robił|miej|napisz|przeczytaj|widzę|widział|lubię|mam|masz|chcę|wolę|zostawiam|pamięta)\\w*\\b)[A-Za-ząćęłńóśźżĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż]{2,} to (?-i:[a-ząćęłńóśźż]{3,})(?:\\s+(?-i:[a-ząćęłńóśźż]{3,}))?,\\s+nie\\s+(?-i:[a-ząćęłńóśźż]{3,})(?=[.!?;\\n]|$)",
+    "opis": "antyteza inwersyjna forma B: X to Y, nie Z (kopuła „to\" z podmiotem niezaimkowym; lista częstych czasowników z „to\"-dopełnieniem wykluczona — świadome ograniczenie, reszta = Stage 2)"
   },
   {
     "id": "PL-HEDGE",
