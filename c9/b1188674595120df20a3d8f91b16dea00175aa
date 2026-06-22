@@ -1,0 +1,19 @@
+rules.schema.md
+  s_b1f4aea171d2c2::t_5f8169b436c55a 23
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "c9b1188674595120df20a3d8f91b16dea00175aa",
+  "prompts": {},
+  "sessions": {
+    "s_b1f4aea171d2c2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "adfe49fb-2db9-454f-8881-22f8870c2ccc",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "<eryk@talentcanvas.tech>"
+    }
+  }
+}
