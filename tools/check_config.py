@@ -29,7 +29,8 @@ def main():
         print(f"[ERROR] brak {CONFIG_PATH}", file=sys.stderr)
         sys.exit(1)
 
-    cfg = json.load(open(CONFIG_PATH, encoding="utf-8"))
+    with open(CONFIG_PATH, encoding="utf-8") as f:
+        cfg = json.load(f)
     profiles = cfg.get("profiles", {})
 
     # 1. default == DEFAULT_THRESHOLDS
