@@ -1,0 +1,21 @@
+tools/check_id_consistency.py
+  s_b1f4aea171d2c2::t_bf80fa7dc9f87d 78-108
+  s_b1f4aea171d2c2::t_2d39f5e46916b1 133,142-155,163-165
+  s_b1f4aea171d2c2::t_7ec5f64c872fbf 17-21
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "3d53aac7d9bb60f763313c96ab7b92901caf58a9",
+  "prompts": {},
+  "sessions": {
+    "s_b1f4aea171d2c2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "adfe49fb-2db9-454f-8881-22f8870c2ccc",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "<eryk@talentcanvas.tech>"
+    }
+  }
+}
