@@ -90,6 +90,14 @@ class NormalizedDoc:
         Mapowanie odcinkami liniowe: znajdź ostatni punkt kotwiczący o offsecie_w_text <= zadany
         i dodaj różnicę. Pusty `source_map` => tożsamość. Implementacja kotwic należy do adaptera
         (C3/C4) — tu definiujemy tylko semantykę odczytu.
+
+        ZNANE OGRANICZENIE (StructuralAdapter, must-fix przed OutputAdapter): wewnątrz segmentu
+        tekstu zawierającego ENCJE HTML (np. `&amp;`) mapowanie jest PRZYBLIŻONE. `convert_charrefs`
+        dekoduje encję (`&amp;` → `&`: 5 znaków źródła → 1 znak tekstu), a interpolacja zakłada 1:1,
+        więc po encji offset źródłowy jest zaniżony o `len(encja)-1` za każdą encję. Poprawny na
+        początku segmentu, rozjazd po pierwszej encji. NIE używany dziś przez linter (InputAdapter
+        karmi detekcję tylko `doc.text`), ale MUSI być naprawiony zanim powstanie OutputAdapter
+        (zapis zwrotny edycji do HTML) — inaczej edycje po encji trafią w złe miejsce źródła.
         """
         if not (0 <= text_offset <= len(self.text)):
             raise ValueError(
@@ -484,7 +492,12 @@ class _ProseHTMLParser(_HTMLParser):
     def handle_data(self, data):
         if self._skip_depth > 0:
             return
-        # kotwica: bieżąca pozycja w prozie ↔ pozycja danych w źródle (getpos → wiersz/kol → offset)
+        # kotwica: bieżąca pozycja w prozie ↔ pozycja danych w źródle (getpos → wiersz/kol → offset).
+        # ZNANE OGRANICZENIE (must-fix przed OutputAdapter): kotwica stawiana na POCZĄTKU bloku danych.
+        # Gdy `data` zawiera zdekodowaną ENCJĘ (convert_charrefs scala „&amp;"→"&" w jeden blok),
+        # wewnątrz tego bloku to_source_offset rozjeżdża się o len(encja)-1 za każdą encję (znak
+        # tekstu ≠ znak źródła). Naprawa: kotwice per-encja albo wyłączyć convert_charrefs i mapować
+        # encje jawnie. Dziś nieistotne (linter używa tylko doc.text); patrz to_source_offset.
         src_off = self._current_source_offset()
         self.source_map.append((self.text_len, src_off))
         self.parts.append(data)

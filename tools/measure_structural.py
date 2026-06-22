@@ -58,6 +58,31 @@ def c_source_map():
     return html[src:src + 5] == "Drugi"
 
 
+def c_source_map_mid_segment():
+    # mapowanie w ŚRODKU segmentu (bez encji) MA być poprawne — gate nie ukrywa rozjazdu offsetu
+    html = "<p>Pierwsze slowo a potem dalekie slowo koncowe.</p>"
+    doc = adapter.StructuralAdapter().normalize(html)
+    i = doc.text.index("koncowe")
+    src = doc.to_source_offset(i)
+    return html[src:src + 7] == "koncowe"
+
+
+def c_source_map_entity_known_limit():
+    # ZNANE OGRANICZENIE: po encji &amp; mapowanie jest PRZYBLIŻONE (rozjazd o len(encja)-1).
+    # Asercja BIEŻĄCEGO (błędnego) zachowania — żeby ograniczenie było WIDOCZNE, nie zamiecione.
+    # Gdy ktoś naprawi source_map dla encji (must-fix przed OutputAdapter), ten test celowo zacznie
+    # FAILować → sygnał, by zaktualizować go na poprawną asercję.
+    html = "<p>Ala &amp; Ola maja kota tutaj.</p>"
+    doc = adapter.StructuralAdapter().normalize(html)
+    # przed encją: poprawne
+    i_ala = doc.text.index("Ala")
+    ok_before = doc.source[doc.to_source_offset(i_ala):doc.to_source_offset(i_ala) + 3] == "Ala"
+    # po encji: PRZYBLIŻONE — „kota" NIE trafia (rozjazd o len("&amp;")-1). Dokumentujemy stan.
+    i_kota = doc.text.index("kota")
+    drift_present = doc.to_source_offset(i_kota) != html.index("kota")
+    return ok_before and drift_present
+
+
 def c_source_preserved():
     html = "<p>Cokolwiek.</p>"
     doc = adapter.StructuralAdapter().normalize(html)
@@ -89,6 +114,9 @@ check("zawartość <code> pomijana w prozie", c_code_skipped)
 check("<br> = miękki podział (linie w jednym akapicie)", c_br_soft_break)
 check("routing wg rozszerzenia (.html→Structural, .md→Markdown, .txt→PlainText)", c_routing_by_extension)
 check("source_map mapuje pozycję prozy na źródło", c_source_map)
+check("source_map poprawny w ŚRODKU segmentu (bez encji)", c_source_map_mid_segment)
+check("source_map z encją — ZNANE OGRANICZENIE (przybliżone, must-fix przed OutputAdapter)",
+      c_source_map_entity_known_limit)
 check("source zachowane (oryginalny HTML)", c_source_preserved)
 
 

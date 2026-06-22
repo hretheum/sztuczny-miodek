@@ -155,8 +155,16 @@ Dowód leczenia (end-to-end, zweryfikowany): ten sam płaski HTML z 4 `<p>` po 1
 ### Plan rozbudowy (pozostałe, do pełnego adaptera)
 - ✅ Wpięcie wejścia (`.html`/`.htm`/`.xhtml` w `collect_files` + `_select_adapter`) — ZROBIONE.
 - ✅ `<br>` jako miękka granica — ZROBIONE.
-- **OutputAdapter (zapis zwrotny)**: edycje prozy → źródło HTML przez `source_map` (kotwice
-  odcinkami liniowe; dziś `StructuralAdapter` to tylko `InputAdapter`).
+- ⚠️ **WARUNEK WSTĘPNY OutputAdapter — naprawa `source_map` dla encji HTML**: dziś
+  `to_source_offset` jest PRZYBLIŻONE wewnątrz segmentu z encjami (`&amp;` itp.) — `convert_charrefs`
+  dekoduje encję (5 znaków źródła → 1 znak tekstu), więc po encji offset źródłowy jest zaniżony o
+  `len(encja)-1`. Poprawne na początku segmentu, rozjazd po pierwszej encji. NIE używane dziś przez
+  linter (InputAdapter karmi tylko `doc.text`), ale MUST-FIX zanim powstanie OutputAdapter — inaczej
+  edycja prozy po encji trafi w złe miejsce źródła. Naprawa: kotwice per-encja lub wyłączenie
+  `convert_charrefs` z jawnym mapowaniem encji. Udokumentowane w `to_source_offset`/`handle_data`,
+  widoczne w gate `tools/measure_structural.py` (przypadek encji jako znane ograniczenie).
+- **OutputAdapter (zapis zwrotny)**: edycje prozy → źródło HTML przez `source_map` — DOPIERO po
+  naprawie encji (punkt wyżej). Dziś `StructuralAdapter` to tylko `InputAdapter`.
 - **Pełniejsze pokrycie**: zagnieżdżone tabele/listy, atrybuty `alt`/`title` jako proza, encje
   brzegowe, segmenty `block` dla struktur (jak w Markdown C3).
 - **Confluence storage**: obsługa `<ac:*>`/`<ri:*>` (makra) jako bloków nie-prozy.
