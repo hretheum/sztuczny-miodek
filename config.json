@@ -1,0 +1,39 @@
+{
+  "$schema": "./config.schema.md",
+  "active_profile": "default",
+  "profiles": {
+    "default": {
+      "opis": "Domyślne progi = stan historyczny (zero zmiany zachowania względem kodu sprzed D1).",
+      "thresholds": {
+        "emdash_per_paragraph": 3,
+        "bold_per_paragraph": 4,
+        "connector_overload_per_file": 3,
+        "en_anti_series_per_file": 2,
+        "pl_anti_series_per_file": 3,
+        "density_per_500_words": 8
+      }
+    },
+    "luzny": {
+      "opis": "Profil luźny — wyższe progi, mniej blokad (mniej czuły; do tekstów swobodnych).",
+      "thresholds": {
+        "emdash_per_paragraph": 4,
+        "bold_per_paragraph": 5,
+        "connector_overload_per_file": 4,
+        "en_anti_series_per_file": 3,
+        "pl_anti_series_per_file": 4,
+        "density_per_500_words": 10
+      }
+    },
+    "ostry": {
+      "opis": "Profil ostry — niższe progi, więcej blokad (bardziej czuły; do tekstów formalnych/CV).",
+      "thresholds": {
+        "emdash_per_paragraph": 2,
+        "bold_per_paragraph": 3,
+        "connector_overload_per_file": 2,
+        "en_anti_series_per_file": 2,
+        "pl_anti_series_per_file": 2,
+        "density_per_500_words": 6
+      }
+    }
+  }
+}

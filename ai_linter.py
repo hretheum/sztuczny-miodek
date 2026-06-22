@@ -28,6 +28,11 @@ from typing import Callable, List, Tuple
 # by `import adapter` działał niezależnie od bieżącego katalogu — tak jak RULES_PATH względem __file__.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import adapter  # noqa: E402 — domyślny adapter wejścia/wyjścia (C1, wierny podział akapitów)
+import config   # noqa: E402 — progi/profile jako konfiguracja (D1)
+
+# Progi proceduralne ładowane z config.json (profil aktywny; brak pliku → wartości historyczne).
+# Zero zmiany zachowania dla profilu „default". Nadpisywalne przez --profile w main().
+THRESHOLDS = config.load_thresholds()
 
 
 # ---------------------------------------------------------------------------
@@ -233,7 +238,7 @@ def detect_connector_overload(text: str) -> List[Tuple[int, str]]:
     Zwraca listę (line, fragment) wszystkich trafień jeśli łącznie ≥3.
     """
     matches = list(CONNECTOR_RE.finditer(text))
-    if len(matches) >= 3:
+    if len(matches) >= THRESHOLDS["connector_overload_per_file"]:
         result = []
         for m in matches:
             line = get_line_number(text, m.start())
@@ -265,7 +270,7 @@ def detect_emdash_overuse(text: str, lang: str) -> List[Tuple[int, str, str]]:
     paras = split_paragraphs(text)
     for offset, para in paras:
         dashes = DASH_RE.findall(_prose_only(para))
-        if len(dashes) >= 3:
+        if len(dashes) >= THRESHOLDS["emdash_per_paragraph"]:
             line = get_line_number(text, offset)
             fragment = truncate_fragment(f"em-dash ×{len(dashes)}: {para[:40]}")
             hits.append((line, mid, fragment))
@@ -300,7 +305,7 @@ def detect_bold_overload(text: str, lang: str) -> List[Tuple[int, str, str]]:
     paras = split_paragraphs(text)
     for offset, para in paras:
         bolds = BOLD_RE.findall(_prose_only(para))
-        if len(bolds) >= 4:
+        if len(bolds) >= THRESHOLDS["bold_per_paragraph"]:
             line = get_line_number(text, offset)
             fragment = truncate_fragment(f"bold ×{len(bolds)}: {para[:40]}")
             hits.append((line, mid, fragment))
@@ -496,7 +501,7 @@ def scan_file(filepath: str, compiled_markers, lang_filter: str) -> Tuple[List[H
 
     # --- EN-ANTI seria: block jeśli ≥2 trafień antytezy EN w pliku ---
     en_anti_count = sum(1 for h in hits if h.mid == "EN-ANTI")
-    if en_anti_count >= 2:
+    if en_anti_count >= THRESHOLDS["en_anti_series_per_file"]:
         for h in hits:
             if h.mid == "EN-ANTI" and h.klasa == "review":
                 h.klasa = "block"
@@ -506,7 +511,7 @@ def scan_file(filepath: str, compiled_markers, lang_filter: str) -> Tuple[List[H
     # Próg 3 (nie 2 jak EN), bo ", nie"/"a nie" częstsze naturalnie w polszczyźnie.
     # Łapie przypadek, gdy pojedyncze antytezy są OK, ale ich nawał po akapitach brzmi generatorowo.
     pl_anti_count = sum(1 for h in hits if h.mid == "PL-ANTI")
-    if pl_anti_count >= 3:
+    if pl_anti_count >= THRESHOLDS["pl_anti_series_per_file"]:
         for h in hits:
             if h.mid == "PL-ANTI" and h.klasa == "review":
                 h.klasa = "block"
@@ -520,7 +525,7 @@ def scan_file(filepath: str, compiled_markers, lang_filter: str) -> Tuple[List[H
     cyrillic_found = any(h.mid == "PL-SIGN" and "CYRYLICA" in h.match_fragment for h in hits)
     if cyrillic_found:
         verdict = "FAIL-HARD"
-    elif blockers > 0 or density > 8:
+    elif blockers > 0 or density > THRESHOLDS["density_per_500_words"]:
         verdict = "FAIL"
     else:
         verdict = "PASS"
@@ -641,7 +646,21 @@ def main():
         default="manifest",
         help="Format wyjścia (domyślnie: manifest).",
     )
+    parser.add_argument(
+        "--profile",
+        default=None,
+        help="Profil progów z config.json (np. default/luzny/ostry). Domyślnie: active_profile z configu.",
+    )
     args = parser.parse_args()
+
+    # D1: jeśli wskazano --profile, przeładuj progi proceduralne dla tego profilu.
+    if args.profile is not None:
+        global THRESHOLDS
+        try:
+            THRESHOLDS = config.load_thresholds(args.profile)
+        except ValueError as e:
+            print(f"[ERROR] {e}", file=sys.stderr)
+            sys.exit(2)
 
     files = collect_files(args.paths)
     if not files:
