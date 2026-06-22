@@ -56,6 +56,13 @@ else
   echo "FAIL build-dict — ekstrakcja/veto kanonu/format szkicu rozjechał się (patrz wyżej)"; fail=1
 fi
 
+echo "== Log decyzji: append-only JSONL, surowiec D3/B3 (D4) =="
+if python3 "$DIR/../tools/check_decision_log.py"; then
+  : # OK — komunikat wypisuje sam skrypt
+else
+  echo "FAIL log decyzji — append-only/walidacja/odczyt rozjechał się (patrz wyżej)"; fail=1
+fi
+
 echo "== Recall triady: PL-RHET/EN-TRIAD na tests/triad_eval.md (B1) =="
 if python3 "$DIR/../tools/measure_triad.py" --min-recall 1.0; then
   : # OK — komunikat wypisuje sam skrypt

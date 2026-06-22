@@ -17,6 +17,9 @@ env/
 *.tmp
 *.bak
 
+# Log decyzji accept/reject (D4) — dane runtime, append-only; nie wersjonujemy
+decisions.jsonl
+
 # Edytory / IDE
 .vscode/
 .idea/
