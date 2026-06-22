@@ -1,0 +1,31 @@
+tools/check_dictionary.py
+  s_b1f4aea171d2c2::t_f7142002df1aee 1-74
+dictionary.py
+  s_b1f4aea171d2c2::t_5b2bb924557e65 1-92
+tests/run_tests.sh
+  s_b1f4aea171d2c2::t_8013ee4ac3b55e 45-51
+dictionary.schema.md
+  s_b1f4aea171d2c2::t_0f6eebe9ecccdc 1-51
+dictionary.example.json
+  s_b1f4aea171d2c2::t_6daa615020ae8e 1-18
+ai_linter.py
+  s_b1f4aea171d2c2::t_024cd8dcf5f8af 475-485
+  s_b1f4aea171d2c2::t_26d98f02ecfa06 666-672,684-693
+  s_b1f4aea171d2c2::t_dbfcb332c6074f 30-32,38-39
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "13225e73f9686835137622a2f6228f87f52fa5c8",
+  "prompts": {},
+  "sessions": {
+    "s_b1f4aea171d2c2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "adfe49fb-2db9-454f-8881-22f8870c2ccc",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "<eryk@talentcanvas.tech>"
+    }
+  }
+}
