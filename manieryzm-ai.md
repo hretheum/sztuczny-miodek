@@ -2,6 +2,8 @@
 
 Plik opisuje 14 kategorii AI-manieryzmu wykrywanych przez skill `sztuczny-miodek`. Jest lustrem `ai_linter.py` — każde ID kategorii w tym dokumencie odpowiada identycznemu ID w linterze. Przy rozbieżności między dokumentem a linterem ten plik jest źródłem prawdy; linter należy zaktualizować.
 
+Sekcje opisowe (przykłady, kolumny „Dlaczego/Poprawka/Próg", bramka PASS/FAIL) są pisane ręcznie. Natomiast sekcja **„Katalog reguł (auto-generowany z rules.json)"** powstaje automatycznie z pliku reguł `rules.json` (jedno źródło prawdy wzorców regex) przez `tools/gen_doc_catalog.py` — nie edytuj jej ręcznie. Po każdej zmianie `rules.json` uruchom generator, a CI pilnuje zgodności (`gen_doc_catalog.py --check`).
+
 ---
 
 ## Warstwa PL
@@ -246,6 +248,126 @@ Blok podsumowania:
 == SUMMARY ==
 plik | słowa | trafienia | em-dash/akapit(max) | gęstość/500 | blokery | WERDYKT
 ```
+
+---
+
+## Katalog reguł (auto-generowany z rules.json)
+
+<!-- BEGIN:auto-katalog-regul -->
+Sekcja wygenerowana automatycznie z `rules.json` przez `tools/gen_doc_catalog.py` — nie edytuj ręcznie. Liczba reguł regexowych: 47 w 13 kategoriach.
+
+### PL-SIGN — PL — klasa: review
+
+| Opis | Wzorzec (regex) |
+|---|---|
+| puste otwarcie: warto podkreślić/zauważyć | `\bwarto (?:tu )?(?:podkreśl\|zauważ\|zaznacz\|pamięta\|dodać\|wspomnieć\|nadmienić\|zwrócić uwagę)` |
+| puste otwarcie: należy zauważyć/podkreślić | `\bnależy (?:tu )?(?:zauważyć\|podkreślić\|pamiętać\|zaznaczyć\|dodać\|wspomnieć)\b` |
+| signpost: co istotne/ważne | `\bco (?:istotne\|ważne\|ciekawe\|znamienne\|warte odnotowania),` |
+| klisza temporalna: w dzisiejszych czasach | `\bw dzisiejszych czasach\b` |
+| klisza temporalna: w dobie/obliczu/erze | `\bw (?:dobie\|obliczu\|erze)\b` |
+| klisza: w dynamicznie zmieniającym się | `\bw dynamicznie (?:zmieniając\|rozwijając)\w* się\b` |
+| klisza: nie sposób przecenić | `\bnie sposób (?:przecenić\|nie\b)` |
+| signpost: jak (powszechnie) wiadomo | `\bjak (?:powszechnie )?wiadomo\b` |
+| signpost zamknięcia: podsumowując/reasumując | `\b(?:podsumowując\|reasumując\|konkludując\|wnioskując\|na zakończenie)\b` |
+| meta-zaproszenie: zanurzmy/zagłębmy się | `\b(?:zanurzmy\|zagłębmy\|przyjrzyjmy\|zastanówmy\|skupmy\|pochylmy) się\b` |
+| meta-zaproszenie: przyjrzyjmy się bliżej | `\bprzyjrzyjmy się bliżej\b` |
+| hedging zamknięcia: mam nadzieję, że ten/ta/to | `\bmam nadzieję, że (?:ten\|ta\|to\|powyższ\|niniejsz)` |
+
+### PL-CLICHE — PL — klasa: review
+
+| Opis | Wzorzec (regex) |
+|---|---|
+| klisza: odgrywa kluczową rolę | `\bodgrywa (?:kluczow\|istotn\|ważn\|znacząc\|niebagateln)\w* rolę\b` |
+| klisza: kluczową rolę odgrywa | `\b(?:kluczow\|istotn\|ważn)\w* rolę odgrywa\b` |
+| klisza: ma kluczowe/istotne znaczenie | `\bma (?:kluczowe\|istotne\|ogromne\|zasadnicze) znaczenie\b` |
+| klisza: kluczowe znaczenie ma | `\b(?:kluczowe\|istotne\|ogromne) znaczenie ma\b` |
+| klisza: stanowi integralną część/fundament | `\bstanowi (?:integraln\w+ część\|nieodłączn\w+ element\|fundament\|podstawę\|trzon\|filar)\b` |
+| superlatyw: rewolucyjny/przełomowy/innowacyjny | `\b(?:rewolucyjn\|przełomow\|innowacyjn\|nowoczesn\|nowatorsk\|niezrównan\|bezprecedensow)\w+\b` |
+| klisza: możliwości (są) nieograniczone | `\bmożliwości (?:są )?(?:praktycznie \|niemal \|wręcz )?(?:nieograniczone\|nieskończone)\b` |
+| klisza: zmienia reguły gry | `\bzmienia reguły gry\b` |
+| klisza: to dopiero początek/wierzchołek | `\bto dopiero (?:początek\|wierzchołek)\b` |
+| klisza: w erze cyfrowej/AI | `\bw erze (?:cyfrow\|sztucznej inteligencji\|AI)\w*\b` |
+
+### PL-RHET — PL — klasa: block / review
+
+| Opis | Wzorzec (regex) |
+|---|---|
+| antyteza redefinicyjna: To nie X — to Y | `[Tt]o nie (?:jest )?.{1,40}[—–\-] to\b` |
+| antyteza redefinicyjna: To nie X. To Y | `[Tt]o nie (?:jest )?.{1,40}\.\s+[Tt]o\b` |
+| paralelizm: nie tylko… ale również | `\bnie tylko\b.{1,80}?\b(?:ale\|lecz)(?: również\| także\| i)?\b` |
+| dychotomia: z jednej strony | `\bz jednej strony\b` |
+| triada? | `\b(\w+), (\w+),? (?:i\|oraz) (\w+)\b` |
+| rozpiętość: od X po Y | `\bod \w+(?:y\|ów\|i)? (?:po\|aż po) \w+` |
+
+### PL-ANTI — PL — klasa: review
+
+| Opis | Wzorzec (regex) |
+|---|---|
+| antyteza: X, a nie Y | `,\s+a nie\b` |
+| antyteza inwersyjna: ..., nie Y (domknięcie) | `,\s+nie\s+\w+(?:\s+\w+)?(?=[.!?;\n]\|$)` |
+
+### PL-HEDGE — PL — klasa: review
+
+| Opis | Wzorzec (regex) |
+|---|---|
+| podwójny hedge: mogłoby… potencjalnie | `\b(?:mogłoby\|mógłby\|można by\|dałoby się)\b.{0,30}\b(?:potencjalnie\|ewentualnie\|w pewnym sensie)\b` |
+| hedge: potencjalnie | `\bpotencjalnie\b` |
+| hedge: wydaje się, że | `\bwydaje się, że\b` |
+| hedge: zdaje się, że | `\bzdaje się, że\b` |
+| hedge: warto byłoby rozważyć | `\bwarto byłoby rozważyć\b` |
+| hedge: w pewnym sensie | `\bw pewnym sensie\b` |
+
+### PL-TYPO — PL — klasa: review
+
+| Opis | Wzorzec (regex) |
+|---|---|
+| nagłówek-klisza: Kluczowe wnioski / Podsumowanie | `(?m)^#{1,6}\s*(?:Kluczowe wnioski\|Najważniejsze (?:punkty\|wnioski\|informacje)\|Co dalej\??\|Podsumowanie\|Wnioski końcowe)\b` |
+
+### EN-ANTI — EN — klasa: review
+
+| Opis | Wzorzec (regex) |
+|---|---|
+| antythesis: not only/just… but | `\bnot (?:just\|only\|merely\|simply)\b.{1,80}?\b(?:but\|it'?s\|it is)\b` |
+| antythesis: it's not X — it's Y | `\bit'?s not\b.{1,40}[—–\-]\s*it'?s\b` |
+| antythesis: not X, but Y | `\bnot \w+, but \w+\b` |
+
+### EN-TRIAD — EN — klasa: review
+
+| Opis | Wzorzec (regex) |
+|---|---|
+| triad? | `\b(\w+), (\w+),? and (\w+)\b` |
+
+### EN-PARA — EN — klasa: review
+
+| Opis | Wzorzec (regex) |
+|---|---|
+| parallelism: self-X and self-Y | `\bself-\w+ and self-\w+\b` |
+| parallelism: X-Y and A-B | `\b(\w+)-(\w+) and (\w+)-(\w+)\b` |
+
+### EN-CLICHE — EN — klasa: review
+
+| Opis | Wzorzec (regex) |
+|---|---|
+| EN klisza/signpost | `\b(?:it'?s worth noting\|worth noting that\|in today'?s (?:fast-paced\|ever-changing) world\|ever-evolving (?:landscape\|world)\|delve into\|delv(?:e\|ing)\|tapestry\|a testament to\|testament to\|navigate the complexities\|first-class\|seamless(?:ly)?\|robust\|leverag(?:e\|ing)\|spearhead(?:ed\|ing)?\|i am (?:confident\|excited\|thrilled\|passionate)(?: that\| to\| about)?\|passionate about\|at the end of the day\|the through-line\|game-?changer\|cutting-edge\|best-in-class\|state-of-the-art\|unlock(?:ing)?(?: the)? potential)\b` |
+
+### EN-HEDGE — EN — klasa: review
+
+| Opis | Wzorzec (regex) |
+|---|---|
+| hedge EN | `\b(?:arguably\|it could be argued\|to some extent\|one could say\|it may well be)\b` |
+
+### EN-SUPER — EN — klasa: review
+
+| Opis | Wzorzec (regex) |
+|---|---|
+| superlatyw EN | `\b(?:incredibly\|extremely\|truly\|remarkably\|highly\|exceptionally\|undoubtedly\|absolutely\|deeply)\b` |
+
+### EN-CONCL — EN — klasa: review
+
+| Opis | Wzorzec (regex) |
+|---|---|
+| signpost zamknięcia EN | `\b(?:in conclusion\|overall\|ultimately\|all in all\|in summary\|to sum up\|in essence\|when all is said)\b` |
+<!-- END:auto-katalog-regul -->
 
 ---
 
