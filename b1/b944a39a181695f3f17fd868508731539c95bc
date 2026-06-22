@@ -1,0 +1,27 @@
+tests/sentence_eval.md
+  s_b1f4aea171d2c2::t_8ca68d88acdceb 1-26
+tools/measure_sentences.py
+  s_b1f4aea171d2c2::t_5d49cfe6366f05 1-55
+adapter.py
+  s_b1f4aea171d2c2::t_79b53ac8cd8390 204-232,237-246,249,251-265
+tests/run_tests.sh
+  s_b1f4aea171d2c2::t_f8dc5cc5194e50 52-58
+docs/ADAPTER-INTERFACE.md
+  s_b1f4aea171d2c2::t_88d03edb4cd7d7 77-83
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "b1b944a39a181695f3f17fd868508731539c95bc",
+  "prompts": {},
+  "sessions": {
+    "s_b1f4aea171d2c2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "adfe49fb-2db9-454f-8881-22f8870c2ccc",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "<eryk@talentcanvas.tech>"
+    }
+  }
+}
