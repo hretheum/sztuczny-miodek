@@ -339,23 +339,78 @@ def strip_code_spans(text: str) -> str:
     return stripped
 
 
+# Wiersz nie-prozy (struktura MD): nagłówek, lista, lista numerowana, cytat, checklista, tabela.
+# Spójne z _NON_PROSE_RE w linterze, plus tabela (wiersz z „|"). Wiersze takie trafiają do
+# segmentów kind="block" (nie liczą się jako proza dla em-dash/bold/triad).
+_MD_BLOCK_LINE_RE = _re.compile(r"^\s*(?:#{1,6}\s|[-*+]\s|\d+\.\s|>|\[[ xX]\])")
+
+
+def _is_block_line(line: str) -> bool:
+    """Czy wiersz to struktura MD (nie proza): nagłówek/lista/cytat/checklista/tabela."""
+    return "|" in line or bool(_MD_BLOCK_LINE_RE.match(line))
+
+
+def classify_md_segments(text: str) -> List[Segment]:
+    """Dzieli tekst na segmenty `paragraph` (proza) i `block` (struktura MD), z wiernymi offsetami.
+
+    Akapit = blok oddzielony pustą linią (jak `split_paragraphs_faithful`). Wewnątrz akapitu wiersze
+    strukturalne (nagłówek/lista/tabela/cytat) są grupowane w segmenty `block`, a ciągi prozy w
+    `paragraph`. Niezmiennik: `text[s.start:s.end] == s.text`. Bloki kodu są już wyzerowane
+    (spacje) przez `strip_code_spans` przed wywołaniem, więc tu trafiają jako proza pustych spacji
+    — nieszkodliwe (0 myślników/bold). To czyni adapter samodzielnym nośnikiem wiedzy o strukturze."""
+    segments: List[Segment] = []
+    for para in split_paragraphs_faithful(text):
+        if not para.text:
+            continue
+        # podziel akapit na ciągłe pasma: block-lines vs prose-lines, zachowując offsety wierszy
+        line_start = para.start
+        run_start = para.start
+        run_is_block = None
+        # iteruj po wierszach akapitu (z „\n" jako separatorem, offsety wierne)
+        lines = para.text.split("\n")
+        for idx, ln in enumerate(lines):
+            ln_is_block = _is_block_line(ln)
+            ln_end = line_start + len(ln)
+            if run_is_block is None:
+                run_is_block = ln_is_block
+                run_start = line_start
+            elif ln_is_block != run_is_block:
+                # zamknij poprzednie pasmo [run_start, line_start-1) (bez końcowego „\n")
+                seg_end = line_start - 1  # poprzedni „\n"
+                kind = "block" if run_is_block else "paragraph"
+                segments.append(Segment(kind, text[run_start:seg_end], run_start, seg_end,
+                                        line=text.count("\n", 0, run_start) + 1))
+                run_start = line_start
+                run_is_block = ln_is_block
+            # następny wiersz zaczyna się po „\n"
+            line_start = ln_end + 1
+        # zamknij ostatnie pasmo do końca akapitu
+        if run_is_block is not None:
+            kind = "block" if run_is_block else "paragraph"
+            segments.append(Segment(kind, text[run_start:para.end], run_start, para.end,
+                                    line=text.count("\n", 0, run_start) + 1))
+    return segments
+
+
 class MarkdownAdapter(InputAdapter, OutputAdapter):
     """Adapter Markdown (C3): wierna ekstrakcja prozy świadoma składni MD.
 
     `normalize` produkuje `text` = źródło z WYZEROWANĄ zawartością kodu (bloki ```/~~~ i inline
     `…`), zachowując długość i nowe linie — więc offsety pozostają tożsame ze źródłem
     (`source_map = []`, zapis zwrotny bezpośredni). Dzięki temu detektory (em-dash, bold) nie
-    liczą znaków w kodzie jako manieryzmu prozy. Tabele/listy/nagłówki/cytaty są nadal odsiewane
-    per-wiersz przez `_prose_only` w linterze (to zachowanie z C1 — tu nie dublujemy).
+    liczą znaków w kodzie jako manieryzmu prozy.
 
-    Segmenty akapitów liczone na tekście po wyzerowaniu kodu (wierne offsety)."""
+    Segmenty: proza → `paragraph`, struktura MD (nagłówki, listy, tabele, cytaty, checklisty oraz
+    wyzerowane bloki kodu) → `block`. Konsument może pominąć `block` przy regułach prozy. Linter
+    nadal stosuje `_prose_only` per-wiersz (zachowanie z C1) — adapter to UOGÓLNIA na poziomie
+    segmentów, nie dublując ani nie pogarszając."""
 
     def normalize(self, raw: str) -> NormalizedDoc:
         text = strip_code_spans(raw)
         return NormalizedDoc(
             text=text,
             source=raw,
-            segments=split_paragraphs_faithful(text),
+            segments=classify_md_segments(text),
             source_map=[],  # długość zachowana → offsety tożsame ze źródłem
         )
 

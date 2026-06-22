@@ -98,10 +98,18 @@ kodu (``` / ~~~) i kodu inline (`` `…` ``), zachowując DŁUGOŚĆ i nowe lini
 tożsame ze źródłem (`source_map = []`, zapis zwrotny aplikowany do `source`), więc numery linii
 pozostają wierne, a detektory przestają widzieć myślniki/bold/„triady" w kodzie.
 
+**Segmenty `block` vs `paragraph`:** `MarkdownAdapter.normalize` (przez `classify_md_segments`)
+oznacza struktury MD — nagłówki, listy, listy numerowane, cytaty, checklisty, tabele oraz
+wyzerowane bloki kodu — jako segmenty `kind="block"`, a ciągi prozy jako `paragraph`, z wiernymi
+offsetami (`doc.text[s.start:s.end] == s.text`). Adapter jest więc samodzielnym nośnikiem wiedzy
+o strukturze (konsument może pominąć `block` przy regułach prozy), uogólniając per-wierszowy
+`_prose_only` na poziom segmentów — bez dublowania i bez zmiany detekcji.
+
 **Wpięcie:** `scan_file` przepuszcza tekst przez `strip_code_spans` i podaje wynik detektorom
 PROCEDURALNYM (em-dash, bold, SVO, connector, emoji) — bo liczą znaki PROZY. Markery regex
 deklaratywne działają na oryginalnym tekście. Tabele/listy/nagłówki/cytaty są nadal odsiewane
-per-wiersz przez `_prose_only` (zachowanie z C1 — nie dublujemy).
+per-wiersz przez `_prose_only` (zachowanie z C1 — nie dublujemy; segmenty `block` to równoległa,
+strukturalna reprezentacja dla konsumentów adaptera).
 
 Leczona kruchość (dowód): blok ```` ```python\nx = a — b — c — d ```` był liczony jako em-dash
 overuse → werdykt FAIL. Po C3 kod jest wyzerowany → PASS. Na korpusie testowym (brak prozy w

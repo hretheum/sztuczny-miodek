@@ -70,6 +70,15 @@ case(
 )
 
 
+def _segment_kinds(source):
+    """Mapuje treść segmentu → kind z MarkdownAdapter (do asercji klasyfikacji)."""
+    doc = adapter.MarkdownAdapter().normalize(source)
+    # niezmiennik wierności przy okazji
+    for s in doc.segments:
+        assert doc.text[s.start:s.end] == s.text, "niewierny offset segmentu"
+    return [(s.kind, s.text.strip()) for s in doc.segments]
+
+
 def main():
     fails = []
     for desc, source, check in CASES:
@@ -82,8 +91,22 @@ def main():
         if not ok:
             fails.append(desc)
 
-    ok = len(CASES) - len(fails)
-    print(f"Adapter Markdown — {ok}/{len(CASES)} przypadków OK")
+    # Klasyfikacja segmentów (block vs paragraph) — adapter jako nośnik wiedzy o strukturze MD.
+    md = "# Nagłówek\n\nProza zwykła.\n\n- lista\n- punkt\n\n| a | b |\n|---|---|\n\nKoniec prozy."
+    kinds = _segment_kinds(md)
+    expected = [
+        ("block", "# Nagłówek"),
+        ("paragraph", "Proza zwykła."),
+        ("block", "- lista\n- punkt"),
+        ("block", "| a | b |\n|---|---|"),
+        ("paragraph", "Koniec prozy."),
+    ]
+    if kinds != expected:
+        fails.append(f"klasyfikacja segmentów MD rozjechała się: {kinds}")
+    n_struct = len(CASES) + 1
+
+    ok = n_struct - len(fails)
+    print(f"Adapter Markdown — {ok}/{n_struct} przypadków OK (kod + klasyfikacja segmentów)")
     for desc in fails:
         print(f"  [FAIL] {desc}", file=sys.stderr)
     if fails:
