@@ -206,7 +206,36 @@ python3 tools/measure_health.py --manifest manifest.json --alarm 0.08    # nadpi
 python3 runner.py --manifest manifest.json        # exit 1 gdy bramka FAIL
 ```
 
-Schematy: `metrics.schema.md` (redukcja, atrybucja, zdrowie), `runner.schema.md` (kontrakt orkiestracji), `decision-log.schema.md` (wspólny strumień zdarzeń runnera i logu decyzji).
+**Realny silnik osądu (`engines.py`).** Domyślnie runner woła atrapę (bez kosztu, bez sieci). Realny model serwowany po HTTP wpina się przez dwa adaptery zero-dep (biblioteka standardowa, `urllib`), wybierane sekcją `stage2` w `config.json`. Klucz API czytany jest wyłącznie ze zmiennej środowiskowej (`api_key_env`), nigdy z pliku.
+
+Endpoint zgodny z OpenAI Chat Completions (OpenRouter, vLLM, RunPod):
+
+```json
+"stage2": {
+  "engine": "openai",
+  "openai": { "base_url": "https://openrouter.ai/api/v1", "model": "speakleash/bielik-11b-v2.3-instruct",
+              "api_key_env": "OPENROUTER_API_KEY", "extra_headers": {} }
+}
+```
+
+```bash
+export OPENROUTER_API_KEY=...                      # sekret czytany z ENV
+python3 runner.py --manifest manifest.json --engine openai
+```
+
+Ollama (lokalna albo zdalna na RunPodzie) — `base_url` wskazuje host Ollamy:
+
+```json
+"stage2": { "engine": "ollama", "ollama": { "host": "http://localhost:11434", "model": "bielik" } }
+```
+
+```bash
+python3 runner.py --manifest manifest.json --engine ollama
+```
+
+`--engine` na CLI nadpisuje wybór z configu; brak sekcji `stage2` znaczy atrapa (zero zmiany). Adaptery, prompt osądu i fail-safe parsowania opisuje `engines.schema.md`. Uwaga: realny smoke (Bielik) wymaga dostępnego endpointu, np. modelu serwowanego na RunPodzie; testy w repo działają w pełni offline na atrapie HTTP, bez wywołań sieci.
+
+Schematy: `metrics.schema.md` (redukcja, atrybucja, zdrowie), `runner.schema.md` (kontrakt orkiestracji), `engines.schema.md` (kontrakt realnych adapterów silnika), `decision-log.schema.md` (wspólny strumień zdarzeń runnera i logu decyzji).
 
 ## Opcjonalna warstwa terminologii domenowej
 
