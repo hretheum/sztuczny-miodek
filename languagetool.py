@@ -5,7 +5,9 @@ languagetool.py — opcjonalny klient LanguageTool: pełna korekta polszczyzny N
 POZA Stage 1, Stage 2 i POZA BRAMKĄ. To NIE jest JudgeEngine i NIE wpina się do runnera ani do
 bramki jakości. To dostawca pomocniczy: operator świadomie odpytuje serwer LanguageTool (publiczny
 api.languagetool.org albo lokalny serwer) i dostaje strukturalne sugestie korekty (literówki,
-gramatyka, interpunkcja) — uzupełnienie lekkiego rdzenia o pełną korektę polszczyzny.
+gramatyka, interpunkcja) — uzupełnienie lekkiego rdzenia o pełną korektę polszczyzny. Endpoint
+wybiera zmienna środowiskowa LANGUAGETOOL_ENDPOINT (fallback: publiczny serwer), więc operator
+przekierowuje G4 na lokalny serwer bez zmiany kodu czy argumentów.
 
 ZERO-DEP (biblioteka standardowa: urllib, json). Warstwa HTTP WSTRZYKIWALNA (parametr `transport`,
 wzór jak engines.py). W TESTACH transport jest atrapą zwracającą ustaloną kopertę — realne API
@@ -25,13 +27,31 @@ fallbackiem; błąd JSON lub brak `matches` → pusta lista (nie wyjątek).
 """
 
 import json
+import os
 import urllib.parse
 from dataclasses import dataclass, field
-from typing import List
+from typing import List, Optional
 
-# Domyślny endpoint: publiczny serwer LanguageTool. Konfigurowalny — operator może podać lokalny
-# serwer (np. http://localhost:8081/v2/check), żeby nie wysyłać tekstu na zewnątrz.
-DEFAULT_ENDPOINT = "https://api.languagetool.org/v2/check"
+# Publiczny serwer LanguageTool — fallback, gdy operator nie wskaże własnego.
+PUBLIC_ENDPOINT = "https://api.languagetool.org/v2/check"
+
+# Zmienna środowiskowa wybierająca endpoint (np. lokalny serwer na localhost:8081/v2/check,
+# żeby nie wysyłać tekstu na zewnątrz). Czytana PRZY WYWOŁANIU (resolve_endpoint), nie przy imporcie.
+ENDPOINT_ENV_VAR = "LANGUAGETOOL_ENDPOINT"
+
+# Alias zgodności wstecznej. UWAGA: rzeczywisty domyślny endpoint rozstrzyga resolve_endpoint
+# (jawny argument > LANGUAGETOOL_ENDPOINT > publiczny), więc ta stała to tylko publiczny fallback.
+DEFAULT_ENDPOINT = PUBLIC_ENDPOINT
+
+
+def resolve_endpoint(explicit: Optional[str] = None) -> str:
+    """Rozstrzyga endpoint wg priorytetu: jawny argument > LANGUAGETOOL_ENDPOINT > publiczny.
+
+    Zmienna środowiskowa czytana tutaj (przy wywołaniu), więc ustawienie jej w środowisku
+    operatora przekierowuje G4 na lokalny serwer bez zmiany kodu czy argumentów."""
+    if explicit:
+        return explicit
+    return os.environ.get(ENDPOINT_ENV_VAR) or PUBLIC_ENDPOINT
 
 # Wspólny User-Agent (część serwerów / proxy odrzuca domyślny Python-urllib).
 USER_AGENT = "sztuczny-miodek/1.0"
@@ -133,13 +153,15 @@ def parse_response(raw: str) -> List[Suggestion]:
     return out
 
 
-def check_text(text, *, language="pl-PL", endpoint=DEFAULT_ENDPOINT, transport=None,
+def check_text(text, *, language="pl-PL", endpoint=None, transport=None,
                timeout=30.0) -> List[Suggestion]:
     """Odpytuje serwer LanguageTool o korektę `text` i zwraca listę Suggestion.
 
-    POST form-encoded (NIE JSON): `text` + `language`. Endpoint konfigurowalny (publiczny lub
-    lokalny serwer). Transport WSTRZYKIWALNY (`transport`); domyślnie `_default_http_transport`.
-    W TESTACH podaje się atrapę — realne API nigdy nie jest wołane offline."""
+    POST form-encoded (NIE JSON): `text` + `language`. Endpoint rozstrzyga resolve_endpoint
+    (jawny `endpoint` > LANGUAGETOOL_ENDPOINT > publiczny), więc operator może przekierować G4 na
+    lokalny serwer samą zmienną środowiskową. Transport WSTRZYKIWALNY (`transport`); domyślnie
+    `_default_http_transport`. W TESTACH podaje się atrapę — realne API nigdy nie jest wołane offline."""
+    endpoint = resolve_endpoint(endpoint)
     body = urllib.parse.urlencode({"text": text, "language": language}).encode("utf-8")
     headers = {
         "Content-Type": "application/x-www-form-urlencoded",

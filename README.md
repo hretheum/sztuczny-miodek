@@ -362,9 +362,10 @@ python3 tools/languagetool_check.py --file artykul.md
 python3 tools/languagetool_check.py --text "Mam pewien błont ortograficzny."
 python3 tools/languagetool_check.py --file artykul.md --json
 python3 tools/languagetool_check.py --text "..." --endpoint http://localhost:8081/v2/check
+LANGUAGETOOL_ENDPOINT=http://localhost:8081/v2/check python3 tools/languagetool_check.py --file artykul.md
 ```
 
-Klient jest zero-dep (biblioteka standardowa, `urllib`) i odpytuje serwer LanguageTool po HTTP: domyślnie publiczny `api.languagetool.org`, ale endpoint jest konfigurowalny, więc można wskazać lokalny serwer i nie wysyłać tekstu na zewnątrz. Zwraca strukturalne sugestie: pozycja, długość, komunikat, proponowane zamienniki, identyfikator reguły i kategorii. Parsowanie odpowiedzi jest odporne na brak pól. Realny serwer jest wołany wyłącznie przy faktycznym uruchomieniu; self-test (`tools/check_languagetool.py`) działa w pełni offline na atrapie transportu, bez wywołań sieci. Kontrakt: `languagetool.schema.md`.
+Klient jest zero-dep (biblioteka standardowa, `urllib`) i odpytuje serwer LanguageTool po HTTP. Endpoint wybiera priorytet: flaga `--endpoint`, potem zmienna środowiskowa `LANGUAGETOOL_ENDPOINT`, na końcu publiczny `api.languagetool.org`. Dzięki temu można wskazać lokalny serwer (np. `http://localhost:8081/v2/check`) i nie wysyłać tekstu na zewnątrz, ustawiając samą zmienną środowiskową. Zwraca strukturalne sugestie: pozycja, długość, komunikat, proponowane zamienniki, identyfikator reguły i kategorii. Parsowanie odpowiedzi jest odporne na brak pól. Realny serwer jest wołany wyłącznie przy faktycznym uruchomieniu; self-test (`tools/check_languagetool.py`) działa w pełni offline na atrapie transportu, bez wywołań sieci. Kontrakt: `languagetool.schema.md`.
 
 ## Opcjonalna warstwa terminologii domenowej
 

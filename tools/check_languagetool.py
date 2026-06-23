@@ -117,11 +117,31 @@ def main():
     if not cap.get("headers", {}).get("User-Agent"):
         fails.append("2) brak nagłówka User-Agent")
 
-    # potwierdzenie: domyślny endpoint to publiczny serwer (gdy nie podano)
-    cap2 = {}
-    languagetool.check_text("x", transport=_capturing_transport(cap2, "{}"))
-    if cap2.get("url") != languagetool.DEFAULT_ENDPOINT:
-        fails.append(f"2) domyślny endpoint: oczekiwano {languagetool.DEFAULT_ENDPOINT!r}, jest {cap2.get('url')!r}")
+    # potwierdzenie: bez jawnego endpointu i bez zmiennej środowiskowej → publiczny serwer
+    _saved_env = os.environ.pop(languagetool.ENDPOINT_ENV_VAR, None)
+    try:
+        cap2 = {}
+        languagetool.check_text("x", transport=_capturing_transport(cap2, "{}"))
+        if cap2.get("url") != languagetool.PUBLIC_ENDPOINT:
+            fails.append(f"2) domyślny endpoint: oczekiwano {languagetool.PUBLIC_ENDPOINT!r}, jest {cap2.get('url')!r}")
+
+        # zmienna środowiskowa LANGUAGETOOL_ENDPOINT przekierowuje na lokalny serwer
+        os.environ[languagetool.ENDPOINT_ENV_VAR] = "http://localhost:8081/v2/check"
+        cap3 = {}
+        languagetool.check_text("x", transport=_capturing_transport(cap3, "{}"))
+        if cap3.get("url") != "http://localhost:8081/v2/check":
+            fails.append(f"2) LANGUAGETOOL_ENDPOINT ignorowany: oczekiwano localhost:8081, jest {cap3.get('url')!r}")
+
+        # jawny endpoint ma pierwszeństwo nad zmienną środowiskową
+        cap4 = {}
+        languagetool.check_text("x", endpoint="https://jawny.test/v2/check",
+                                transport=_capturing_transport(cap4, "{}"))
+        if cap4.get("url") != "https://jawny.test/v2/check":
+            fails.append(f"2) jawny endpoint nie wygrał z env: jest {cap4.get('url')!r}")
+    finally:
+        os.environ.pop(languagetool.ENDPOINT_ENV_VAR, None)
+        if _saved_env is not None:
+            os.environ[languagetool.ENDPOINT_ENV_VAR] = _saved_env
 
     # --- 3: odporność na braki ---
     if languagetool.parse_response("{}") != []:

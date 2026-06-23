@@ -11,10 +11,11 @@ Użycie:
     python3 tools/languagetool_check.py --text "Mam pewien błont ortograficzny."
     python3 tools/languagetool_check.py --file x.md --json
     python3 tools/languagetool_check.py --text "..." --endpoint http://localhost:8081/v2/check
+    LANGUAGETOOL_ENDPOINT=http://localhost:8081/v2/check python3 tools/languagetool_check.py --file x.md
 
 Realne API LanguageTool jest wołane TYLKO przy faktycznym uruchomieniu (transport nie jest
-wystawiony w CLI — produkcyjnie zawsze _default_http_transport). Endpoint konfigurowalny
-(--endpoint); domyślnie publiczny api.languagetool.org.
+wystawiony w CLI — produkcyjnie zawsze _default_http_transport). Endpoint rozstrzyga priorytet:
+--endpoint > zmienna LANGUAGETOOL_ENDPOINT > publiczny api.languagetool.org.
 """
 
 import argparse
@@ -54,9 +55,10 @@ def main(argv=None):
     src.add_argument("--file", help="Ścieżka pliku do sprawdzenia.")
     src.add_argument("--text", help="Tekst do sprawdzenia (zamiast pliku).")
     ap.add_argument("--language", default="pl-PL", help="Kod języka (domyślnie pl-PL).")
-    ap.add_argument("--endpoint", default=languagetool.DEFAULT_ENDPOINT,
-                    help="Endpoint LanguageTool (publiczny lub lokalny serwer). "
-                         f"Domyślnie {languagetool.DEFAULT_ENDPOINT}.")
+    ap.add_argument("--endpoint", default=None,
+                    help="Endpoint LanguageTool (publiczny lub lokalny serwer). Pierwszeństwo: "
+                         f"--endpoint > zmienna LANGUAGETOOL_ENDPOINT > publiczny "
+                         f"({languagetool.PUBLIC_ENDPOINT}).")
     ap.add_argument("--json", action="store_true", help="Wypisz surowe sugestie jako JSON.")
     args = ap.parse_args(argv)
 

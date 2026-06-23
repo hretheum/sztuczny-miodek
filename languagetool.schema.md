@@ -15,9 +15,12 @@ realne API LanguageTool jest wołane TYLKO przy faktycznym uruchomieniu CLI prze
 
 ## Endpoint
 
-`DEFAULT_ENDPOINT = "https://api.languagetool.org/v2/check"` (publiczny serwer). Konfigurowalny — operator
-może podać lokalny serwer (np. `http://localhost:8081/v2/check`), żeby nie wysyłać tekstu na zewnątrz
-(CLI: `--endpoint`).
+Endpoint rozstrzyga `resolve_endpoint` wg priorytetu: jawny argument > zmienna środowiskowa
+`LANGUAGETOOL_ENDPOINT` > publiczny serwer (`PUBLIC_ENDPOINT = "https://api.languagetool.org/v2/check"`,
+stała `DEFAULT_ENDPOINT` to jego alias zgodności wstecznej). Operator może wskazać lokalny serwer (np.
+`http://localhost:8081/v2/check`), żeby nie wysyłać tekstu na zewnątrz: przez zmienną środowiskową
+(`LANGUAGETOOL_ENDPOINT=...`) albo jednorazowo flagą CLI `--endpoint`. Zmienna jest czytana przy każdym
+wywołaniu, nie przy imporcie modułu.
 
 ## API LanguageTool (potwierdzone realnym wywołaniem)
 
@@ -80,6 +83,7 @@ python3 tools/languagetool_check.py --file dokument.md
 python3 tools/languagetool_check.py --text "Mam pewien błont."
 python3 tools/languagetool_check.py --file x.md --json
 python3 tools/languagetool_check.py --text "..." --endpoint http://localhost:8081/v2/check
+LANGUAGETOOL_ENDPOINT=http://localhost:8081/v2/check python3 tools/languagetool_check.py --file x.md
 ```
 
 `--file` i `--text` są rozłączne (jedno wymagane). `--json` wypisuje surowe sugestie jako JSON; bez
