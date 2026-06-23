@@ -107,6 +107,44 @@ Uruchomienie:
 cd tests && ./run_tests.sh
 ```
 
+## Ekonomia i obserwowalność (metryki z manifestu)
+
+Linter zdejmuje pracę z modelu. Ile dokładnie, da się zmierzyć z samego manifestu, bez wołania LLM i bez kosztu tokenów. Granicą między etapami jest manifest, więc te metryki liczy się po stronie Stage 1. Moduł `metrics.py`, narzędzia w `tools/`.
+
+Najpierw zbuduj manifest maszynowy, potem przepuść go przez narzędzie:
+
+```bash
+python3 ai_linter.py --format json *.md > manifest.json
+```
+
+**Współczynnik redukcji (`tools/measure_reduction.py`).** Udział treści wejścia, której model NIE tyka. Treść routowana do Stage 2 to akapity z trafieniem klasy `review`. Punkt odniesienia z praktyki autora po wprowadzeniu lintera: routed rzędu 4 do 5 procent.
+
+```bash
+python3 tools/measure_reduction.py --manifest manifest.json
+python3 tools/measure_reduction.py --manifest manifest.json --max-routed 0.10   # exit 1 gdy za dużo idzie do modelu
+```
+
+**Atrybucja pracy (`tools/measure_attribution.py`).** Która reguła i która warstwa generuje najwięcej trafień. Raport diagnostyczny, bez progu.
+
+```bash
+python3 tools/measure_attribution.py --manifest manifest.json
+```
+
+**Zdrowie ekonomii (`tools/measure_health.py`).** Bierze współczynnik routed i porównuje z progiem alarmu z `config.json` (sekcja `economy`). Gdy linter przestaje odsiewać, routed rośnie i alarm zapala się, zanim wyląduje w rachunku za tokeny. Exit 1 przy ALARM, więc nadaje się na bramkę w CI.
+
+```bash
+python3 tools/measure_health.py --manifest manifest.json
+python3 tools/measure_health.py --manifest manifest.json --alarm 0.08    # nadpisz próg
+```
+
+**Runner Stage 2 (`runner.py`).** Spina linter z osądem modelu. Czyta manifest, wybiera segmenty `review` (tą samą funkcją co współczynnik redukcji), woła wymienialny silnik osądu i stosuje bramkę „PASS z uwagami to NIE PASS". Domyślny silnik to deterministyczna atrapa (bez sieci); realny silnik wpina się przez `engines.JudgeEngine` bez zmian w runnerze.
+
+```bash
+python3 runner.py --manifest manifest.json        # exit 1 gdy bramka FAIL
+```
+
+Schematy: `metrics.schema.md` (redukcja, atrybucja, zdrowie), `runner.schema.md` (kontrakt orkiestracji), `decision-log.schema.md` (wspólny strumień zdarzeń runnera i logu decyzji).
+
 ## Opcjonalna warstwa terminologii domenowej
 
 Skill obsługuje opcjonalny tryb z własnym słownikiem terminów branżowych. Jeśli posiadasz taki plik, terminy w nim zdefiniowane mają pierwszeństwo nad ogólnymi regułami dla swojej dziedziny. Bez słownika skill działa w trybie ogólnym: pełny audyt polszczyzny i manieryzmu AI. Słownik domenowy jest zewnętrzny i nie wchodzi w skład repozytorium.
