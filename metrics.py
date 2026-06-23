@@ -36,6 +36,13 @@ ZNANE OGRANICZENIE: trafienie review, którego linii nie da się przypisać żad
 pliku (np. plik niedostępny dla `file_reader` albo trafienie poza akapitami), jest liczone
 zachowawczo jako routed o wadze całego pliku w wariancie awaryjnym — patrz `reduction_from_manifest`
 (per_file z flagą "fallback"). W normalnym przebiegu (plik czytelny) to się nie zdarza.
+
+ATRYBUCJA PRACY (E2)
+====================
+`attribution_from_manifest` rozbija trafienia wg WARSTWY (deklaratywna/proceduralna) i wg REGUŁY
+(id markera), czysto z manifestu — odpowiada na „która reguła robi modelowi najwięcej roboty".
+`attribution_from_runner` dokłada rozbicie per SILNIK z wyniku runnera Stage 2 (G1), gdy jest
+dostępny; sam manifest werdyktów silnika nie zawiera (jawne ograniczenie). Szczegóły niżej.
 """
 
 import os
@@ -193,3 +200,172 @@ def reduction_from_manifest(manifest, file_reader=_default_file_reader):
 
 # Punkt odniesienia z praktyki autora (hit rate po wprowadzeniu lintera): 4–5% treści routowanej.
 REFERENCE_ROUTED_RATIO = 0.045
+
+
+# ============================================================================
+# ATRYBUCJA PRACY (E2) — rozbicie wkładu w pracę modelu wg WARSTWY i wg REGUŁY.
+# ============================================================================
+#
+# Pytanie E2: „która reguła (i która warstwa) robi najwięcej pracy", czyli generuje
+# najwięcej trafień routowanych do osądu modelu (Stage 2). Liczone CZYSTO z manifestu,
+# bez LLM i bez wołania lintera.
+#
+# WARSTWA = źródło trafienia:
+#   - deklaratywna  — regex z rules.json: id ∈ {id z ai_linter.MARKER_DEFS},
+#   - proceduralna  — detektor kodu: id ∈ ai_linter.PROCEDURAL_MARKER_IDS.
+#
+# Reguła rozstrzygania nakładki (PL-TYPO bywa w obu zbiorach):
+#   ID czysto proceduralne (PL-RHYTHM, EN-DASH — brak ich w MARKER_DEFS) => "proceduralna".
+#   ID obecne w MARKER_DEFS (m.in. PL-TYPO, PL-SIGN) => "deklaratywna".
+#   Innymi słowy: obecność w MARKER_DEFS wygrywa; jeśli ID nie ma w MARKER_DEFS,
+#   a jest w PROCEDURAL_MARKER_IDS — to proceduralna. ID nieznane żadnemu zbiorowi
+#   trafia do worka "nieznana" (sygnał rozjazdu reguł).
+#
+# Główną miarą jest tu LICZBA TRAFIEŃ (nie słowa) — atrybucja odpowiada na „co generuje
+# robotę dla modelu", a robotę generuje pojedyncze trafienie review. Liczymy oba: trafienia
+# klasy "review" (realnie routowane do Stage 2) oraz "block" (zamknięte przez linter), żeby
+# diagnoza pokazała też, co linter odsiewa twardo.
+
+
+def _declarative_ids():
+    """Zbiór ID reguł deklaratywnych (regex z rules.json), z ai_linter.MARKER_DEFS."""
+    return {m[0] for m in ai_linter.MARKER_DEFS}
+
+
+def classify_layer(rule_id):
+    """Klasyfikuje ID reguły do warstwy: "deklaratywna" | "proceduralna" | "nieznana".
+
+    Reguła rozstrzygania nakładki: obecność w MARKER_DEFS wygrywa (więc PL-TYPO, które jest
+    w obu zbiorach, klasyfikujemy jako deklaratywne). ID spoza MARKER_DEFS, ale w
+    PROCEDURAL_MARKER_IDS (PL-RHYTHM, EN-DASH) => proceduralna. Reszta => "nieznana".
+    """
+    if rule_id in _declarative_ids():
+        return "deklaratywna"
+    if rule_id in ai_linter.PROCEDURAL_MARKER_IDS:
+        return "proceduralna"
+    return "nieznana"
+
+
+def attribution_from_manifest(manifest):
+    """Atrybucja pracy z manifestu (bez LLM): per reguła, per warstwa, per klasa.
+
+    Wejście: manifest (dict) {"hits":[...], "summary":[...]}.
+    Zwraca:
+        {
+          "total_hits": N,
+          "per_class": {"review": R, "block": B},
+          "per_rule": [   # posortowane malejąco wg liczby trafień (potem alfabetycznie po id)
+              {"id", "layer", "hits", "review", "block", "share"},  # share = hits/total_hits
+              ...
+          ],
+          "per_layer": {
+              "deklaratywna": {"hits", "review", "block", "share"},
+              "proceduralna": {"hits", "review", "block", "share"},
+              "nieznana":     {"hits", "review", "block", "share"},  # tylko gdy >0
+          },
+        }
+
+    Inwariant: Σ per_rule[*].hits == total_hits == Σ per_class[*]; udział (share) sumuje się do 1.0
+    (gdy total_hits > 0). Przy braku trafień zwraca puste rozbicia i total_hits == 0.
+    """
+    hits = manifest.get("hits", [])
+    total = len(hits)
+
+    per_rule = {}        # id -> {"hits","review","block"}
+    per_class = {"review": 0, "block": 0}
+    per_layer = {}       # layer -> {"hits","review","block"}
+
+    for h in hits:
+        rid = h.get("id", "?")
+        klasa = h.get("klasa")
+        layer = classify_layer(rid)
+
+        r = per_rule.setdefault(rid, {"hits": 0, "review": 0, "block": 0, "layer": layer})
+        r["hits"] += 1
+        if klasa in ("review", "block"):
+            r[klasa] += 1
+            per_class[klasa] += 1
+
+        lyr = per_layer.setdefault(layer, {"hits": 0, "review": 0, "block": 0})
+        lyr["hits"] += 1
+        if klasa in ("review", "block"):
+            lyr[klasa] += 1
+
+    def _share(n):
+        return (n / total) if total else 0.0
+
+    per_rule_list = [
+        {
+            "id": rid,
+            "layer": d["layer"],
+            "hits": d["hits"],
+            "review": d["review"],
+            "block": d["block"],
+            "share": _share(d["hits"]),
+        }
+        for rid, d in per_rule.items()
+    ]
+    # Ranking: najwięcej pracy na górze; remis rozstrzyga alfabet ID (stabilnie).
+    per_rule_list.sort(key=lambda x: (-x["hits"], x["id"]))
+
+    per_layer_out = {
+        layer: {
+            "hits": d["hits"],
+            "review": d["review"],
+            "block": d["block"],
+            "share": _share(d["hits"]),
+        }
+        for layer, d in per_layer.items()
+    }
+
+    return {
+        "total_hits": total,
+        "per_class": per_class,
+        "per_rule": per_rule_list,
+        "per_layer": per_layer_out,
+    }
+
+
+def attribution_from_runner(runner_result):
+    """Atrybucja per SILNIK z werdyktów runnera Stage 2 (G1), gdy są dostępne.
+
+    OGRANICZENIE (jawne): manifest sam w sobie nie zawiera werdyktów silnika — atrybucja per
+    silnik wymaga wyniku `runner.run_stage2(...)`. Gdy danych z runnera brak, użyj
+    `attribution_from_manifest` (atrybucja per reguła/warstwa wystarcza z samego manifestu).
+
+    Wejście: `runner_result` = dict zwracany przez `runner.run_stage2` (ma klucz "segments" z
+    polami {engine, verdict}). Zwraca rozbicie osądzonych segmentów per silnik:
+        {
+          "judged": N,
+          "per_engine": [  # posortowane malejąco wg liczby osądzonych segmentów
+              {"engine", "judged", "rewrite", "pass", "share"},
+              ...
+          ],
+        }
+    """
+    segments = runner_result.get("segments", [])
+    total = len(segments)
+
+    per_engine = {}   # name -> {"judged","rewrite","pass"}
+    for s in segments:
+        name = s.get("engine", "?")
+        e = per_engine.setdefault(name, {"judged": 0, "rewrite": 0, "pass": 0})
+        e["judged"] += 1
+        if s.get("verdict") == "rewrite":
+            e["rewrite"] += 1
+        else:
+            e["pass"] += 1
+
+    per_engine_list = [
+        {
+            "engine": name,
+            "judged": d["judged"],
+            "rewrite": d["rewrite"],
+            "pass": d["pass"],
+            "share": (d["judged"] / total) if total else 0.0,
+        }
+        for name, d in per_engine.items()
+    ]
+    per_engine_list.sort(key=lambda x: (-x["judged"], x["engine"]))
+
+    return {"judged": total, "per_engine": per_engine_list}

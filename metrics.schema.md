@@ -1,8 +1,9 @@
-# Metryki z manifestu — współczynnik redukcji (E1 / KAN-199)
+# Metryki z manifestu — redukcja (E1) i atrybucja pracy (E2)
 
 Miary ekonomii i obserwowalności liczone z **manifestu** lintera (Stage 1), bez kosztu tokenów i
-bez wołania LLM. Moduł: `metrics.py`. ZERO-DEP (stdlib `re`, plus `ai_linter` dla segmentacji).
-CLI: `tools/measure_reduction.py`. Gate: `tools/check_metrics.py`.
+bez wołania LLM. Moduł: `metrics.py`. ZERO-DEP (stdlib `re`, plus `ai_linter` dla segmentacji i
+klasyfikacji warstw). CLI: `tools/measure_reduction.py` (E1), `tools/measure_attribution.py` (E2).
+Gate: `tools/check_metrics.py` (obejmuje E1 i E2).
 
 ## Po co
 
@@ -98,9 +99,79 @@ python3 tools/measure_reduction.py --manifest manifest.json --min-reduction 0.90
 
 Progi `--max-routed` / `--min-reduction` czynią E1 gate-owalnym (exit 1 przy przekroczeniu).
 
+# Atrybucja pracy (E2)
+
+Atrybucja odpowiada na pytanie „która **reguła** (i która **warstwa**) robi modelowi najwięcej
+roboty", czyli generuje najwięcej trafień. Liczona czysto z manifestu (`attribution_from_manifest`),
+bez LLM. Główną miarą jest tu **liczba trafień** (nie słowa) — robotę dla modelu generuje pojedyncze
+trafienie review. Dla każdej pozycji rozdzielamy klasę `review` (realnie routowane do Stage 2) od
+`block` (zamknięte przez linter), żeby pokazać też, co linter odsiewa twardo.
+
+## Warstwa i reguła rozstrzygania nakładki
+
+**Warstwa** = źródło trafienia:
+
+- **deklaratywna** — regex z `rules.json`: `id ∈ {id z ai_linter.MARKER_DEFS}`,
+- **proceduralna** — detektor kodu: `id ∈ ai_linter.PROCEDURAL_MARKER_IDS` (`PL-TYPO`, `EN-DASH`, `PL-RHYTHM`).
+
+`PL-TYPO` jest w obu zbiorach. Reguła rozstrzygania: **obecność w `MARKER_DEFS` wygrywa**. Czyli
+`PL-TYPO` (jest w `MARKER_DEFS`) i `PL-SIGN` => **deklaratywna**; `PL-RHYTHM` i `EN-DASH` (brak ich w
+`MARKER_DEFS`, są tylko proceduralne) => **proceduralna**. ID nieznane żadnemu zbiorowi => `nieznana`
+(sygnał rozjazdu reguł). Funkcja `classify_layer(rule_id)`.
+
+## Wynik (`attribution_from_manifest`)
+
+```json
+{
+  "total_hits": 6,
+  "per_class": {"review": 5, "block": 1},
+  "per_rule": [
+    {"id": "PL-SIGN",   "layer": "deklaratywna", "hits": 3, "review": 3, "block": 0, "share": 0.5},
+    {"id": "PL-RHYTHM", "layer": "proceduralna", "hits": 2, "review": 2, "block": 0, "share": 0.333},
+    {"id": "EN-DASH",   "layer": "proceduralna", "hits": 1, "review": 0, "block": 1, "share": 0.167}
+  ],
+  "per_layer": {
+    "deklaratywna": {"hits": 3, "review": 3, "block": 0, "share": 0.5},
+    "proceduralna": {"hits": 3, "review": 2, "block": 1, "share": 0.5}
+  }
+}
+```
+
+`per_rule` jest posortowane malejąco wg liczby trafień (remis: alfabet ID). Inwariant:
+`Σ per_rule[*].hits == total_hits == len(hits)`, a `share` sumuje się do 1.0 (gdy `total_hits > 0`).
+
+## Atrybucja per silnik (`attribution_from_runner`) — ograniczenie
+
+Manifest sam w sobie **nie zawiera werdyktów silnika**, więc atrybucji per silnik nie da się policzyć
+z samego manifestu (jawne ograniczenie). Wymaga wyniku `runner.run_stage2(...)` (G1). Gdy danych z
+runnera brak, ogranicz się do atrybucji per reguła/warstwa z manifestu. `attribution_from_runner`
+przyjmuje wynik runnera i zwraca rozbicie osądzonych segmentów per silnik (z `rewrite`/`pass`):
+
+```json
+{ "judged": 3,
+  "per_engine": [ {"engine": "stub", "judged": 2, "rewrite": 2, "pass": 0, "share": 0.667},
+                  {"engine": "inny", "judged": 1, "rewrite": 0, "pass": 1, "share": 0.333} ] }
+```
+
+## CLI E2 (`tools/measure_attribution.py`)
+
+```bash
+python3 ai_linter.py --format json *.md > manifest.json
+python3 tools/measure_attribution.py --manifest manifest.json      # tabele per warstwa + per reguła
+python3 ai_linter.py --format json *.md | python3 tools/measure_attribution.py   # przez stdin
+python3 tools/measure_attribution.py --manifest manifest.json --json             # surowy JSON
+```
+
+To raport diagnostyczny — bez progu, zawsze exit 0.
+
 ## Gate (`tools/check_metrics.py`)
 
-Na zaszytym mini-manifeście i treści w pamięci sprawdza: akapit `review` jest routed, akapit `block`
-i akapit czysty NIE, `routed_words` = słowa akapitu review, inwariant `reduction + routed == 1`, oraz
-wariant awaryjny (`fallback`). Wpięty do `tests/run_tests.sh` jako warstwa „Metryki: współczynnik
-redukcji z manifestu (E1)".
+Na zaszytym mini-manifeście i treści w pamięci sprawdza:
+
+- **E1**: akapit `review` jest routed, akapit `block` i akapit czysty NIE, `routed_words` = słowa
+  akapitu review, inwariant `reduction + routed == 1`, wariant awaryjny (`fallback`),
+- **E2**: `per_rule` sumuje się do `total_hits == len(hits)`, `PL-RHYTHM`/`EN-DASH` => proceduralna,
+  `PL-SIGN` => deklaratywna, ranking malejący, udziały sumują się do 1.0, oraz atrybucja per silnik z
+  wyniku runnera rozdziela `rewrite`/`pass`.
+
+Wpięty do `tests/run_tests.sh` jako warstwa „Metryki: redukcja/atrybucja z manifestu (E1/E2)".

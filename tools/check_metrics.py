@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """
-check_metrics.py — gate metryk z manifestu (E1: współczynnik redukcji). ZERO-DEP (stdlib).
+check_metrics.py — gate metryk z manifestu (E1: redukcja, E2: atrybucja). ZERO-DEP (stdlib).
 
 Działa na zaszytym mini-manifeście i treści podanej W PAMIĘCI (wstrzyknięty file_reader) — bez I/O,
-bez sieci, bez LLM. Weryfikuje fundamenty definicji redukcji:
+bez sieci, bez LLM.
 
+E1 — weryfikuje fundamenty definicji redukcji:
   1. akapit z trafieniem klasy "review" jest liczony jako routed,
   2. akapit z samym trafieniem "block" NIE jest routed (block linter zamyka sam),
   3. akapit czysty NIE jest routed,
@@ -12,6 +13,14 @@ bez sieci, bez LLM. Weryfikuje fundamenty definicji redukcji:
   5. inwariant: reduction_ratio + routed_ratio == 1.0,
   6. routed_ratio porównywalny z odniesieniem (tu liczony, nie zaszyty na sztywno),
   7. wariant awaryjny: plik nieczytelny z trafieniem review => fallback, cały plik jako routed.
+
+E2 — weryfikuje atrybucję pracy:
+  8.  per_rule sumuje się do total_hits == len(hits) (nic się nie gubi),
+  9.  PL-RHYTHM (czysto proceduralny) klasyfikuje się jako warstwa "proceduralna",
+  10. PL-SIGN (w MARKER_DEFS) klasyfikuje się jako "deklaratywna",
+  11. ranking per_rule jest malejący wg liczby trafień,
+  12. udziały (share) w per_rule sumują się do 1.0,
+  13. atrybucja per silnik z wyniku runnera rozdziela werdykty rewrite/pass.
 
 Exit 1 na rozjeździe (gate w run_tests.sh).
 """
@@ -103,6 +112,76 @@ def main():
     if rf["routed_words"] != WORDS_TOTAL:
         fails.append(f"fallback: oczekiwano routed_words={WORDS_TOTAL} (cały plik), jest {rf['routed_words']}")
 
+    # --- E2: atrybucja pracy (per warstwa, per reguła, per silnik) ---
+    # Manifest atrybucji: 3x PL-SIGN (deklaratywna), 2x PL-RHYTHM (proceduralna), 1x EN-DASH (proc., block).
+    attr_manifest = {
+        "hits": [
+            {"file": "a.md", "line": 1, "id": "PL-SIGN", "klasa": "review", "match": "x"},
+            {"file": "a.md", "line": 2, "id": "PL-SIGN", "klasa": "review", "match": "x"},
+            {"file": "a.md", "line": 3, "id": "PL-SIGN", "klasa": "review", "match": "x"},
+            {"file": "a.md", "line": 4, "id": "PL-RHYTHM", "klasa": "review", "match": "x"},
+            {"file": "a.md", "line": 5, "id": "PL-RHYTHM", "klasa": "review", "match": "x"},
+            {"file": "a.md", "line": 6, "id": "EN-DASH", "klasa": "block", "match": "—"},
+        ],
+        "summary": [{"file": "a.md", "words": 100, "hits": 6, "emdash_max": 1,
+                     "density": 0.0, "blockers": 1, "verdict": "FAIL"}],
+    }
+    a = metrics.attribution_from_manifest(attr_manifest)
+
+    # 8: per_rule sumuje się do total_hits == len(hits).
+    sum_rule_hits = sum(r["hits"] for r in a["per_rule"])
+    if a["total_hits"] != 6 or sum_rule_hits != 6:
+        fails.append(f"atrybucja: total_hits={a['total_hits']}, Σ per_rule.hits={sum_rule_hits}, oczekiwano 6")
+
+    by_id = {r["id"]: r for r in a["per_rule"]}
+    # 9: PL-RHYTHM => proceduralna.
+    if by_id["PL-RHYTHM"]["layer"] != "proceduralna":
+        fails.append(f"warstwa PL-RHYTHM: oczekiwano 'proceduralna', jest {by_id['PL-RHYTHM']['layer']}")
+    # 9b: EN-DASH (czysto proceduralny) => proceduralna.
+    if by_id["EN-DASH"]["layer"] != "proceduralna":
+        fails.append(f"warstwa EN-DASH: oczekiwano 'proceduralna', jest {by_id['EN-DASH']['layer']}")
+    # 10: PL-SIGN (w MARKER_DEFS) => deklaratywna.
+    if by_id["PL-SIGN"]["layer"] != "deklaratywna":
+        fails.append(f"warstwa PL-SIGN: oczekiwano 'deklaratywna', jest {by_id['PL-SIGN']['layer']}")
+
+    # 11: ranking malejący wg trafień — PL-SIGN (3) na czele.
+    if a["per_rule"][0]["id"] != "PL-SIGN" or a["per_rule"][0]["hits"] != 3:
+        fails.append(f"ranking: oczekiwano PL-SIGN(3) na czele, jest {a['per_rule'][0]['id']}({a['per_rule'][0]['hits']})")
+
+    # 12: udziały sumują się do 1.0.
+    sum_share = sum(r["share"] for r in a["per_rule"])
+    if abs(sum_share - 1.0) > 1e-9:
+        fails.append(f"udziały per_rule: Σ share={sum_share}, oczekiwano 1.0")
+
+    # per_layer: deklaratywna ma 3 trafienia (PL-SIGN), proceduralna 3 (PL-RHYTHM x2 + EN-DASH).
+    if a["per_layer"].get("deklaratywna", {}).get("hits") != 3:
+        fails.append(f"per_layer deklaratywna.hits: oczekiwano 3, jest {a['per_layer'].get('deklaratywna')}")
+    if a["per_layer"].get("proceduralna", {}).get("hits") != 3:
+        fails.append(f"per_layer proceduralna.hits: oczekiwano 3, jest {a['per_layer'].get('proceduralna')}")
+    # per_class: review 5, block 1.
+    if a["per_class"] != {"review": 5, "block": 1}:
+        fails.append(f"per_class: oczekiwano review=5/block=1, jest {a['per_class']}")
+
+    # 13: atrybucja per silnik z wyniku runnera (G1) — rozdziela rewrite/pass.
+    runner_result = {
+        "segments": [
+            {"file": "a.md", "seg_index": 0, "line": 1, "verdict": "rewrite", "engine": "stub"},
+            {"file": "a.md", "seg_index": 1, "line": 4, "verdict": "rewrite", "engine": "stub"},
+            {"file": "b.md", "seg_index": 0, "line": 1, "verdict": "pass", "engine": "inny"},
+        ],
+    }
+    ae = metrics.attribution_from_runner(runner_result)
+    if ae["judged"] != 3:
+        fails.append(f"per silnik: judged oczekiwano 3, jest {ae['judged']}")
+    eng = {e["engine"]: e for e in ae["per_engine"]}
+    if eng.get("stub", {}).get("rewrite") != 2 or eng.get("stub", {}).get("judged") != 2:
+        fails.append(f"per silnik stub: oczekiwano judged=2/rewrite=2, jest {eng.get('stub')}")
+    if eng.get("inny", {}).get("pass") != 1:
+        fails.append(f"per silnik inny: oczekiwano pass=1, jest {eng.get('inny')}")
+    # Ranking per silnik malejący: stub(2) przed inny(1).
+    if ae["per_engine"][0]["engine"] != "stub":
+        fails.append(f"ranking per silnik: oczekiwano 'stub' na czele, jest {ae['per_engine'][0]['engine']}")
+
     if fails:
         for f in fails:
             print(f"  [FAIL] {f}", file=sys.stderr)
@@ -110,6 +189,9 @@ def main():
 
     print(f"OK   metryki E1: redukcja {r['reduction_ratio']*100:.1f}% / routed {r['routed_ratio']*100:.1f}% "
           f"(akapit review routed, block+czysty pominięte; inwariant red+routed=1; fallback działa).")
+    print(f"OK   metryki E2: atrybucja {a['total_hits']} trafień "
+          f"(per reguła sumuje się; PL-RHYTHM/EN-DASH proceduralne, PL-SIGN deklaratywna; "
+          f"ranking malejący; per silnik rozdziela rewrite/pass).")
 
 
 if __name__ == "__main__":
