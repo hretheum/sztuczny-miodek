@@ -346,9 +346,14 @@ class managed_ephemeral_pod(_SignalTeardownMixin):
     handler sygnału, flaga `_torn_down` (realny terminate raz).
 
     Klucz API z ENV (`api_key_env`) — sekret NIGDY w pliku/argumencie (spójnie z RunPodClient).
-    Warstwa REST WSTRZYKIWALNA dla testów offline:
+    Warstwa REST WSTRZYKIWALNA dla testów offline. UWAGA: są DWA NIEZGODNE kontrakty transportu,
+    więc są DWA osobne parametry (nie wolno ich mieszać):
       - `pod_up` (domyślnie moduł runpod_pod_up): test podstawia atrapę z create_pod/wait/ensure,
-      - `client_transport` (do RunPodClient.terminate): atrapa REST zapisująca wywołania.
+      - `pod_up_transport`: transport launchera (KONTRAKT `runpod_pod_up._default_transport`:
+        `(method, url, *, data, headers, timeout)` — method i url POZYCYJNIE). Idzie do create_pod.
+      - `client_transport`: transport klienta REST (KONTRAKT `RunPodClient._default_rest_transport`:
+        `(url, *, method, data, headers, timeout)` — url pozycyjnie, method jako keyword). Idzie do
+        RunPodClient.terminate. NIE jest kompatybilny z create_pod (inna sygnatura) — dlatego osobno.
     Pod żadną atrapą realna sieć (urllib) nie jest dotykana.
     """
 
@@ -356,7 +361,7 @@ class managed_ephemeral_pod(_SignalTeardownMixin):
                  volume_id, dc, mount="/root/.ollama", image="ollama/ollama:latest",
                  model="hf.co/speakleash/Bielik-11B-v3.0-Instruct-GGUF:Q4_K_M",
                  gpus=None, name="miodek-bielik", no_model=False,
-                 client_transport=None, pod_up=None, wait_kwargs=None):
+                 client_transport=None, pod_up_transport=None, pod_up=None, wait_kwargs=None):
         if not volume_id:
             raise ValueError("managed_ephemeral_pod wymaga niepustego volume_id")
         if not dc:
@@ -381,6 +386,10 @@ class managed_ephemeral_pod(_SignalTeardownMixin):
             import runpod_pod_up as pod_up  # noqa: E402
         self._pod_up = pod_up
         self.gpus = gpus if gpus is not None else list(pod_up.DEFAULT_GPUS)
+        # DWA niezgodne kontrakty transportu (patrz docstring) — trzymane ROZDZIELNIE:
+        #   _pod_up_transport → create_pod (kontrakt launchera: method, url pozycyjnie),
+        #   _client_transport → RunPodClient.terminate (kontrakt klienta: url pozycyjnie, method kw).
+        self._pod_up_transport = pod_up_transport
         self._client_transport = client_transport
         self._wait_kwargs = dict(wait_kwargs or {})
         # Klient REST do TERMINATE — klucz z ENV w konstruktorze (separacja config=CO, ENV=SEKRET).
@@ -393,8 +402,12 @@ class managed_ephemeral_pod(_SignalTeardownMixin):
         self._prev_handlers = {}
 
     @classmethod
-    def from_config(cls, cfg, *, client_transport=None, pod_up=None, wait_kwargs=None):
-        """Buduje menedżera z sekcji config `stage2.runpod` (dict z config.load_runpod)."""
+    def from_config(cls, cfg, *, client_transport=None, pod_up_transport=None,
+                    pod_up=None, wait_kwargs=None):
+        """Buduje menedżera z sekcji config `stage2.runpod` (dict z config.load_runpod).
+
+        Dwa rozdzielne transporty (niezgodne kontrakty — patrz docstring klasy): `client_transport`
+        do RunPodClient.terminate, `pod_up_transport` do create_pod (launcher)."""
         return cls(
             api_key_env=cfg.get("api_key_env", DEFAULT_API_KEY_ENV),
             base_url=cfg.get("base_url", DEFAULT_BASE_URL),
@@ -407,6 +420,7 @@ class managed_ephemeral_pod(_SignalTeardownMixin):
             name=cfg.get("name", "miodek-bielik"),
             no_model=bool(cfg.get("no_model", False)),
             client_transport=client_transport,
+            pod_up_transport=pod_up_transport,
             pod_up=pod_up,
             wait_kwargs=wait_kwargs,
         )
@@ -423,7 +437,7 @@ class managed_ephemeral_pod(_SignalTeardownMixin):
         # 1. Postaw pod (z wolumenu — model nie jest pobierany, jeśli już leży na wolumenie).
         pod = self._pod_up.create_pod(
             api_key, self.volume_id, self.dc, self.mount, self.image,
-            self.gpus, self.name, transport=self._client_transport,
+            self.gpus, self.name, transport=self._pod_up_transport,
         )
         self.pod_id = pod["id"]  # launcher czyta pod["id"] (NIE podId) — spójnie.
         self.url = f"https://{self.pod_id}-11434.proxy.runpod.net"

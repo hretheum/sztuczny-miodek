@@ -92,14 +92,23 @@ def main():
     fails = []
     os.environ[_TEST_KEY_ENV] = "tajny-klucz-efem"
 
+    # Osobny sentinel transportu LAUNCHERA (kontrakt runpod_pod_up._default_transport: method, url
+    # pozycyjnie). NIEZGODNY z client_transport (kontrakt RunPodClient: url pozycyjnie, method kw).
+    # Test pilnuje, że create_pod dostaje WŁAŚNIE ten, a NIE transportu klienta REST (regresja KAN-222).
+    def _pod_up_sentinel(method, url, *, data, headers, timeout):  # noqa: ARG001
+        # Atrapa launchera; w teście create_pod jej nie WYWOŁUJE (atrapuje _FakePodUp), liczy się
+        # tylko TOŻSAMOŚĆ obiektu przekazanego do create_pod(transport=...).
+        return 200, "{}"
+
     def _ctx(pod_up, term_calls, **over):
-        """Buduje managed_ephemeral_pod z atrapami (launcher + transport terminate)."""
+        """Buduje managed_ephemeral_pod z atrapami (launcher + DWA rozdzielne transporty)."""
         kw = dict(
             api_key_env=_TEST_KEY_ENV, base_url="https://rest.example.test/v1",
             volume_id="vol-1", dc="EU-NL-1", mount="/root/.ollama",
             image="ollama/ollama:latest", model="bielik-test",
             name="miodek-test", pod_up=pod_up,
             client_transport=_recording_transport(term_calls),
+            pod_up_transport=_pod_up_sentinel,
             wait_kwargs={"sleep": lambda *_a, **_k: None},
         )
         kw.update(over)
@@ -123,9 +132,15 @@ def main():
         fails.append(f"happy: oczekiwano wait=1 ensure=1, jest wait={pu.wait_calls} ensure={pu.ensure_calls}")
     if len(term) != 1 or term[0]["method"] != "DELETE" or not term[0]["url"].endswith("/pods/pod-aaa"):
         fails.append(f"happy: oczekiwano 1 DELETE /pods/pod-aaa, jest {term}")
-    # create_pod dostał WSTRZYKNIĘTY transport (offline) — nie domyślny.
-    if pu.create_transport is None:
-        fails.append("happy: create_pod nie dostał wstrzykniętego transportu (offline)")
+    # KAN-222 (review): create_pod dostaje transport LAUNCHERA (pod_up_transport), NIE transport
+    # klienta REST (client_transport). To dwa NIEZGODNE kontrakty — gdyby się zlały, realny
+    # create_pod z client_transportem pękłby po cichu (method/url w złej pozycji). Pilnujemy
+    # TOŻSAMOŚCI obiektu: create_pod.transport IS pod_up_sentinel.
+    if pu.create_transport is not _pod_up_sentinel:
+        fails.append(
+            "happy: create_pod dostał ZŁY transport — oczekiwano pod_up_transport (kontrakt "
+            f"launchera), jest {pu.create_transport!r} (regresja rozdziału transportów KAN-222)"
+        )
 
     # 2: wyjątek w with → terminate MIMO TO + propaguje.
     pu2 = _FakePodUp(pod_id="pod-bbb")
@@ -307,6 +322,74 @@ def main():
             fails.append(f"--runpod: oczekiwano 1 create_pod, jest {pu8.create_calls}")
         if len(term8) != 1 or term8[0]["method"] != "DELETE" or not term8[0]["url"].endswith("/pods/pod-flag"):
             fails.append(f"--runpod: oczekiwano 1 DELETE /pods/pod-flag, jest {term8}")
+
+    # === 8b: kontrakty obu transportów (regresja rozdziału KAN-222) ===
+    # Dowód, że oba transporty są wołane ZGODNIE ze swoim kontraktem przez REALNY kod (create_pod
+    # z launchera + RunPodClient._call) — bez sieci (atrapy zapisują pozycje argumentów). Gdyby
+    # transporty się zlały (jeden parametr do obu funkcji), tu pękłoby na pozycji method/url.
+    import runpod_pod_up as _rpu  # noqa: E402
+
+    pod_up_seen = {}
+    def _pod_up_contract(method, url, *, data, headers, timeout):
+        # Kontrakt launchera: method i url POZYCYJNIE.
+        pod_up_seen.update(method=method, url=url)
+        return 200, json.dumps({"id": "pod-contract"})
+    res = _rpu.create_pod(
+        "klucz", "vol", "EU-NL-1", "/root/.ollama", "ollama/ollama:latest",
+        ["RTX"], "miodek-test", transport=_pod_up_contract,
+    )
+    if res.get("id") != "pod-contract":
+        fails.append(f"kontrakt launchera: create_pod nie zwrócił id, jest {res}")
+    if pod_up_seen.get("method") != "POST" or not pod_up_seen.get("url", "").endswith("/pods"):
+        fails.append(f"kontrakt launchera: method/url w złej pozycji: {pod_up_seen}")
+
+    client_seen = {}
+    def _client_contract(url, *, method, data, headers, timeout):
+        # Kontrakt klienta REST: url POZYCYJNIE, method jako keyword.
+        client_seen.update(method=method, url=url)
+        return 200, "{}"
+    os.environ["MIODEK_TEST_CONTRACT_KEY"] = "k"
+    _client = runpod_lifecycle.RunPodClient(
+        api_key_env="MIODEK_TEST_CONTRACT_KEY", base_url="https://rest.example.test/v1",
+        transport=_client_contract,
+    )
+    _client.terminate("pod-contract")
+    os.environ.pop("MIODEK_TEST_CONTRACT_KEY", None)
+    if client_seen.get("method") != "DELETE" or not client_seen.get("url", "").endswith("/pods/pod-contract"):
+        fails.append(f"kontrakt klienta: method/url w złej pozycji: {client_seen}")
+
+    # === 12: publish_gate --runpod bez RUNPOD_API_KEY → exit 2 (NIE traceback) ===
+    # RuntimeError z managed_ephemeral_pod.__enter__ (brak klucza) musi zmapować się na czysty
+    # exit 2, nie wyciec tracebackiem (review KAN-222, drobna #2).
+    _tools_dir = os.path.dirname(os.path.abspath(__file__))
+    if _tools_dir not in sys.path:
+        sys.path.insert(0, _tools_dir)
+    import publish_gate as pg  # noqa: E402
+    with tempfile.TemporaryDirectory() as tmp:
+        proza = os.path.join(tmp, "tekst.md")
+        with open(proza, "w", encoding="utf-8") as f:
+            f.write("To jest zwykly akapit prozy bez blokerow do publikacji testowej.\n")
+        cfgp = os.path.join(tmp, "config.json")
+        # api_key_env wskazuje na ENV, której NA PEWNO nie ma → __enter__ rzuci RuntimeError.
+        with open(cfgp, "w", encoding="utf-8") as f:
+            json.dump({"stage2": {"runpod": {
+                "volume": "v", "dc": "EU-NL-1", "model": "m",
+                "api_key_env": "MIODEK_TEST_BRAK_KLUCZA_PG_ZZZ",
+            }}}, f)
+        os.environ.pop("MIODEK_TEST_BRAK_KLUCZA_PG_ZZZ", None)
+        rc_pg = None
+        outbuf = io.StringIO()
+        with contextlib.redirect_stdout(outbuf), contextlib.redirect_stderr(io.StringIO()):
+            try:
+                rc_pg = pg.main(["--runpod", "--config", cfgp, proza])
+            except SystemExit as e:
+                rc_pg = e.code
+            except BaseException as e:  # traceback zamiast exit 2 = regresja
+                fails.append(f"publish_gate --runpod bez klucza: wyciekł {type(e).__name__} zamiast exit 2: {e}")
+        if rc_pg != 2:
+            fails.append(f"publish_gate --runpod bez klucza: oczekiwano exit 2, jest {rc_pg}")
+        if "WSTRZYMANA" not in outbuf.getvalue():
+            fails.append("publish_gate --runpod bez klucza: brak komunikatu PUBLIKACJA WSTRZYMANA")
 
     # === 10/11: bramka UX korektora ===
     import corrector  # noqa: E402

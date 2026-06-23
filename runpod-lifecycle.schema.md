@@ -143,8 +143,18 @@ w `with`, więc samo `finally` by go nie dotknęło). Teardown bezpieczny do wie
 (flaga `_torn_down`) — realny `terminate` raz. Błąd terminacji GŁOŚNO na `stderr` (bramka kosztowa GPU).
 
 Klucz API z ENV (`api_key_env`, domyślnie `RUNPOD_API_KEY`) — sekret NIGDY w pliku/argumencie.
-Warstwa REST WSTRZYKIWALNA dla testów offline: `pod_up` (atrapa modułu launchera),
-`client_transport` (atrapa REST do `terminate`). Pod żadną atrapą `urllib` nie jest dotykany.
+Warstwa REST WSTRZYKIWALNA dla testów offline. UWAGA: są DWA NIEZGODNE kontrakty transportu, więc
+DWA osobne parametry (nie wolno ich mieszać — przekazanie jednego transportu do obu funkcji pęka po
+cichu na pozycji `method`/`url`):
+
+| parametr | kontrakt sygnatury | cel |
+|---|---|---|
+| `pod_up_transport` | `(method, url, *, data, headers, timeout)` — `method`, `url` POZYCYJNIE (jak `runpod_pod_up._default_transport`) | `create_pod` (launcher) |
+| `client_transport` | `(url, *, method, data, headers, timeout)` — `url` pozycyjnie, `method` keyword (jak `RunPodClient._default_rest_transport`) | `RunPodClient.terminate` |
+
+Dodatkowo `pod_up` (atrapa CAŁEGO modułu launchera) podmienia `create_pod`/`wait_for_ollama`/
+`ensure_model`. Pod żadną atrapą `urllib` nie jest dotykany. `from_config` i `runner.build_ephemeral_runpod`
+przyjmują oba transporty rozdzielnie.
 
 Parametry z `config.load_runpod` (podsekcja `stage2.runpod`): `volume`, `dc`, `mount`, `image`,
 `model`, `gpu`, `name`, `api_key_env`, `base_url` — domyślne = wartości launchera, patrz

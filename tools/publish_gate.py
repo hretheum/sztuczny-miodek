@@ -178,8 +178,11 @@ def main(argv=None):
             with runner.build_ephemeral_runpod(args.config) as pod:
                 engine = runner.build_runpod_engine(args.config, pod=pod)
                 result = runner.run_stage2(manifest, engine=engine)
-        except ValueError as e:
-            print(f"[publish_gate] BŁĄD konfiguracji efemerycznego poda: {e}. "
+        except (ValueError, RuntimeError) as e:
+            # ValueError: błąd konfiguracji (brak volume/dc w config). RuntimeError: brak
+            # RUNPOD_API_KEY, Ollama nie wstała, ensure_model padł (managed_ephemeral_pod.__enter__).
+            # Oba => czysty exit 2 (bramka jakości nie zazielenia się, ale i nie wywala tracebackiem).
+            print(f"[publish_gate] BŁĄD efemerycznego poda Stage 2: {e}. "
                   "PUBLIKACJA WSTRZYMANA (exit 2).")
             return 2
     else:

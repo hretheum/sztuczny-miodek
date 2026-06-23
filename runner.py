@@ -330,7 +330,7 @@ def run_stage2_managed(manifest, engine, config_path=config.CONFIG_PATH,
 
 
 def build_ephemeral_runpod(config_path=config.CONFIG_PATH, *, client_transport=None,
-                           pod_up=None, wait_kwargs=None):
+                           pod_up_transport=None, pod_up=None, wait_kwargs=None):
     """KAN-222: buduje menedżer EFEMERYCZNEGO poda RunPod z sekcji config `stage2.runpod`.
 
     JEDNO ŹRÓDŁO PRAWDY orkiestracji --runpod: woła ją runner._main, corrector._main oraz
@@ -338,11 +338,13 @@ def build_ephemeral_runpod(config_path=config.CONFIG_PATH, *, client_transport=N
     create→wait→ensure_model→terminate nie jest duplikowane.
 
     Zwraca `runpod_lifecycle.managed_ephemeral_pod`. Parametry wstrzykiwalne (`client_transport`,
-    `pod_up`, `wait_kwargs`) wyłącznie do testów offline — produkcja używa domyślnych (realny
-    transport REST i moduł runpod_pod_up)."""
+    `pod_up_transport`, `pod_up`, `wait_kwargs`) wyłącznie do testów offline — produkcja używa
+    domyślnych (realny transport REST i moduł runpod_pod_up). UWAGA: `client_transport` (kontrakt
+    RunPodClient) i `pod_up_transport` (kontrakt launchera) to DWA NIEZGODNE kontrakty — osobno."""
     rp = config.load_runpod(config_path)
     return runpod_lifecycle.managed_ephemeral_pod.from_config(
-        rp, client_transport=client_transport, pod_up=pod_up, wait_kwargs=wait_kwargs,
+        rp, client_transport=client_transport, pod_up_transport=pod_up_transport,
+        pod_up=pod_up, wait_kwargs=wait_kwargs,
     )
 
 

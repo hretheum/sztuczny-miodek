@@ -336,24 +336,6 @@ def _main(argv=None):
         cfg = config.load_stage2(args.config)
         max_iter = int(cfg.get("max_iter", DEFAULT_MAX_ITER))
 
-    # BRAMKA UX (KAN-222): korektor MIELI tekst. Na atrapie (stub) nic realnie nie poprawi —
-    # nie wolno mu mleć po cichu i udawać pracy. Bez --runpod i bez jawnie skonfigurowanego
-    # realnego silnika (ollama/openai z config.json LUB --engine) ODMAWIAMY i kierujemy. Stub
-    # zostaje trybem TESTOWYM: furtka MIODEK_ALLOW_STUB_CORRECTOR=1 (self-testy korektora).
-    if not args.runpod:
-        engine_cfg = config.load_stage2(args.config).get("engine", "stub")
-        explicit_real = args.engine in ("openai", "ollama") or engine_cfg in ("openai", "ollama")
-        allow_stub = os.environ.get("MIODEK_ALLOW_STUB_CORRECTOR") == "1"
-        if not explicit_real and not allow_stub:
-            print(
-                "[corrector] ODMOWA: brak realnego silnika. Korektor na atrapie (stub) nic nie "
-                "poprawi — nie będzie mielił po cichu.\n"
-                "  Użyj --runpod (efemeryczny Bielik na RunPodzie, jeden krok) ALBO ustaw "
-                "stage2.engine na ollama/openai w config.json (lub --engine ollama/openai).",
-                file=sys.stderr,
-            )
-            sys.exit(2)
-
     if args.runpod:
         # KAN-222: efemeryczny pod SAM owija przebieg (create→...→terminate). Wewnątrz wołamy
         # CZYSTY run_stage2 jako stage2_fn (pod już zarządzany przez ten kontekst).
@@ -366,6 +348,25 @@ def _main(argv=None):
             )
     else:
         engine = build_corrector_engine(name=args.engine, config_path=args.config)
+
+        # BRAMKA UX (KAN-222): korektor MIELI tekst. Na atrapie (stub) nic realnie nie poprawi —
+        # nie wolno mu mleć po cichu i udawać pracy. Detekcja PO engine.name (spójnie ze spec i
+        # z runner._is_remote_engine): atrapy mają name "stub"/"stub-rewrite" — oba startswith
+        # "stub"; realne to "ollama:"/"openai:"/"routing:..." z realnymi silnikami pod spodem (nie
+        # zaczynają się od stub). To odporniejsze niż whitelist stringów configu — routing z
+        # realnymi silnikami NIE jest błędnie odrzucany. Stub zostaje trybem TESTOWYM: furtka
+        # MIODEK_ALLOW_STUB_CORRECTOR=1 (self-testy korektora).
+        allow_stub = os.environ.get("MIODEK_ALLOW_STUB_CORRECTOR") == "1"
+        if getattr(engine, "name", "stub").startswith("stub") and not allow_stub:
+            print(
+                "[corrector] ODMOWA: brak realnego silnika. Korektor na atrapie (stub) nic nie "
+                "poprawi — nie będzie mielił po cichu.\n"
+                "  Użyj --runpod (efemeryczny Bielik na RunPodzie, jeden krok) ALBO ustaw "
+                "stage2.engine na ollama/openai w config.json (lub --engine ollama/openai).",
+                file=sys.stderr,
+            )
+            sys.exit(2)
+
         audit_fn = make_default_audit(lang=args.lang, profile=args.profile, dict_path=args.dict_path)
         stage2_fn = _make_managed_stage2(args.config)
 
