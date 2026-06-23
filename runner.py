@@ -329,6 +329,33 @@ def run_stage2_managed(manifest, engine, config_path=config.CONFIG_PATH,
                       log_path=log_path, ts_provider=ts_provider)
 
 
+def build_ephemeral_runpod(config_path=config.CONFIG_PATH, *, client_transport=None,
+                           pod_up=None, wait_kwargs=None):
+    """KAN-222: buduje menedżer EFEMERYCZNEGO poda RunPod z sekcji config `stage2.runpod`.
+
+    JEDNO ŹRÓDŁO PRAWDY orkiestracji --runpod: woła ją runner._main, corrector._main oraz
+    tools/publish_gate.main. Każde CLU dostaje ten sam menedżer (managed_ephemeral_pod), więc
+    create→wait→ensure_model→terminate nie jest duplikowane.
+
+    Zwraca `runpod_lifecycle.managed_ephemeral_pod`. Parametry wstrzykiwalne (`client_transport`,
+    `pod_up`, `wait_kwargs`) wyłącznie do testów offline — produkcja używa domyślnych (realny
+    transport REST i moduł runpod_pod_up)."""
+    rp = config.load_runpod(config_path)
+    return runpod_lifecycle.managed_ephemeral_pod.from_config(
+        rp, client_transport=client_transport, pod_up=pod_up, wait_kwargs=wait_kwargs,
+    )
+
+
+def build_runpod_engine(config_path=config.CONFIG_PATH, pod=None):
+    """KAN-222: buduje OllamaEngine wskazujący na URL świeżego efemerycznego poda (`pod.url`).
+
+    Model brany z sekcji `stage2.runpod` (ten sam tag co ensure_model), więc engine.name =
+    "ollama:<model>" — spójna atrybucja E2/E3 i zdalny prefiks (gdyby ktoś owijał lifecycle).
+    `pod` to wszedłszy w kontekst managed_ephemeral_pod (ma .url). Bez sieci tutaj — sam konstruktor."""
+    rp = config.load_runpod(config_path)
+    return OllamaEngine(host=pod.url, model=rp["model"])
+
+
 def _load_manifest(path):
     """Wczytuje manifest z pliku JSON; '-' = stdin."""
     if path == "-":
@@ -352,16 +379,28 @@ def _main(argv=None):
                          "'routing' wymaga sekcji stage2.routing (primary + appellate).")
     ap.add_argument("--config", default=config.CONFIG_PATH,
                     help="Ścieżka do config.json (sekcja stage2). Domyślnie config repo.")
+    ap.add_argument("--runpod", action="store_true",
+                    help="KAN-222: jeden krok zamiast ręcznej sekwencji. Postaw EFEMERYCZNY pod "
+                         "z wolumenu (parametry stage2.runpod), osądź na realnym Bieliku (Ollama), "
+                         "zgaś pod automatycznie. Nadpisuje --engine i lifecycle. Wymaga "
+                         "RUNPOD_API_KEY w ENV.")
     args = ap.parse_args(argv)
 
     manifest = _load_manifest(args.manifest)
-    engine = build_engine_from_config(name=args.engine, config_path=args.config)
 
-    # KAN-220: auto-offload poda RunPod. Orkiestracja lifecycle wydzielona do
-    # run_stage2_managed (jedno źródło prawdy, reużywane przez F3). Owijanie managed_pod
-    # aktywne TYLKO gdy lifecycle.manage ORAZ silnik zdalny; domyślnie (stub / manage=false)
-    # ścieżka jest IDENTYCZNA jak dotąd (NO-OP). Kontrakt run_stage2 nietknięty.
-    result = run_stage2_managed(manifest, engine=engine, config_path=args.config)
+    if args.runpod:
+        # KAN-222: efemeryczny pod SAM jest owijaczem (create→...→terminate). Wewnątrz wołamy
+        # CZYSTY run_stage2 (bez lifecycle-owijania — pod już zarządzany przez ten kontekst).
+        with build_ephemeral_runpod(args.config) as pod:
+            engine = build_runpod_engine(args.config, pod=pod)
+            result = run_stage2(manifest, engine=engine)
+    else:
+        engine = build_engine_from_config(name=args.engine, config_path=args.config)
+        # KAN-220: auto-offload poda RunPod. Orkiestracja lifecycle wydzielona do
+        # run_stage2_managed (jedno źródło prawdy, reużywane przez F3). Owijanie managed_pod
+        # aktywne TYLKO gdy lifecycle.manage ORAZ silnik zdalny; domyślnie (stub / manage=false)
+        # ścieżka jest IDENTYCZNA jak dotąd (NO-OP). Kontrakt run_stage2 nietknięty.
+        result = run_stage2_managed(manifest, engine=engine, config_path=args.config)
 
     print(f"Stage 2 (silnik: {result['engine']}): osądzono {result['judged']} segmentów review "
           f"→ rewrite {result['rewrite']}, pass {result['pass']} → BRAMKA: {result['gate']}")

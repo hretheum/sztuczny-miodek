@@ -113,6 +113,60 @@ else:
 Owijamy tylko gdy `manage=true` ORAZ silnik zdalny (`engine.name` zaczyna się od `ollama:`/`openai:`).
 Atrapa (`stub`) jest lokalna — nie ma żadnego poda do gaszenia, ścieżka identyczna jak dziś.
 
+## Tryb EFEMERYCZNY: `managed_ephemeral_pod` (KAN-222)
+
+Inny cykl życia niż `managed_pod`: tamten ZARZĄDZA istniejącym podem (start/stop/terminate po
+`pod_id` z configu), ten TWORZY pod na wejściu i TERMINUJE na wyjściu. Realizuje flagę `--runpod`:
+jeden krok zamiast ręcznej sekwencji (postaw pod z wolumenu, osądź na realnym Bieliku, zgaś pod).
+
+Cykl: `create_pod` → `wait_for_ollama` → `ensure_model` → (przebieg Stage 2) → `terminate`.
+Stawianie reużywa launcher `tools/runpod_pod_up.py` (zero duplikacji logiki). URL poda =
+`https://<pod_id>-11434.proxy.runpod.net`, gdzie `pod_id` to `pod["id"]` z `create_pod`.
+
+```python
+ctx = managed_ephemeral_pod.from_config(config.load_runpod(path))
+with ctx as pod:
+    engine = OllamaEngine(host=pod.url, model=...)   # świeży efemeryczny pod
+    result = run_stage2(manifest, engine=engine)     # CZYSTY run_stage2 — pod już owinięty
+# tu pod jest już ZTERMINOWANY — także przy wyjątku / SIGTERM
+```
+
+Te same TRZY warstwy teardownu co `managed_pod` (wspólny `_SignalTeardownMixin`):
+1. **finally** (`__exit__`): `terminate` ZAWSZE, też przy wyjątku; `__exit__` zwraca `False` (wyjątek
+   propaguje).
+2. **handler SIGINT/SIGTERM**: gasi, przywraca poprzedni handler, re-raisuje sygnał.
+3. **backstop watchdog NA podzie**: aktualny i dla efemerycznego poda (`kill -9`).
+
+Plus **gwarancja braku osieroconego poda**: jeśli `wait_for_ollama`/`ensure_model` zawiedzie w
+`__enter__`, JUŻ utworzony pod jest terminowany PRZED rzuceniem `RuntimeError` (proces nie wszedł
+w `with`, więc samo `finally` by go nie dotknęło). Teardown bezpieczny do wielokrotnego wywołania
+(flaga `_torn_down`) — realny `terminate` raz. Błąd terminacji GŁOŚNO na `stderr` (bramka kosztowa GPU).
+
+Klucz API z ENV (`api_key_env`, domyślnie `RUNPOD_API_KEY`) — sekret NIGDY w pliku/argumencie.
+Warstwa REST WSTRZYKIWALNA dla testów offline: `pod_up` (atrapa modułu launchera),
+`client_transport` (atrapa REST do `terminate`). Pod żadną atrapą `urllib` nie jest dotykany.
+
+Parametry z `config.load_runpod` (podsekcja `stage2.runpod`): `volume`, `dc`, `mount`, `image`,
+`model`, `gpu`, `name`, `api_key_env`, `base_url` — domyślne = wartości launchera, patrz
+`config.schema.md`.
+
+### Wpięcie flagi `--runpod` (jedno źródło prawdy)
+
+`runner.build_ephemeral_runpod(config_path)` buduje menedżer; `runner.build_runpod_engine(config_path,
+pod=pod)` buduje `OllamaEngine(host=pod.url, model=runpod.model)`. Trzy CLI (`runner.py`,
+`corrector.py`, `tools/publish_gate.py`) z flagą `--runpod`:
+
+```python
+with runner.build_ephemeral_runpod(args.config) as pod:
+    engine = runner.build_runpod_engine(args.config, pod=pod)
+    result = runner.run_stage2(manifest, engine=engine)   # czysty — ephemeral SAM owija
+```
+
+Bez flagi: ścieżka BEZ ZMIAN (domyślnie stub, zero sieci, zero kosztu). `--runpod` w `publish_gate`
+sam włącza Stage 2. W `corrector` współgra z **bramką UX**: bez `--runpod` i bez realnego silnika
+(stub) korektor ODMAWIA (`exit 2`) i kieruje na `--runpod` albo `stage2.engine=ollama/openai` —
+stub nie miele tekstu po cichu (furtka self-testów: `MIODEK_ALLOW_STUB_CORRECTOR=1`).
+
 ## Test offline: `tools/check_runpod_lifecycle.py`
 
 Wpięty do `tests/run_tests.sh`. Cała warstwa REST wstrzyknięta atrapą (callable zapisująca
@@ -125,4 +179,21 @@ zero wywołań REST. ZERO realnej sieci.
 
 ```bash
 python3 tools/check_runpod_lifecycle.py
+```
+
+## Test offline trybu efemerycznego: `tools/check_runpod_ephemeral.py` (KAN-222)
+
+Wpięty do `tests/run_tests.sh`. Launcher `runpod_pod_up` atrapowany modułem zastępczym
+(`create_pod`/`wait_for_ollama`/`ensure_model`), `terminate` przez atrapę transportu REST. Weryfikuje:
+`managed_ephemeral_pod` (create na wejściu + URL poprawny; dokładnie 1 `terminate` na wyjściu, też
+przy wyjątku w `finally`; sprzątanie osieroconego poda gdy `wait`/`ensure_model` padnie w `__enter__`;
+idempotencja teardownu → 1 `terminate`; brak klucza ENV → `RuntimeError` bez `create`; SIGTERM →
+`terminate` + przywrócony handler; `no_model=True` pomija `ensure_model`); `config.load_runpod`
+(fallback `DEFAULT_RUNPOD` + scalanie punktowe + walidacja `volume`/`dc`/`model`/`gpu`);
+`build_ephemeral_runpod`/`build_runpod_engine` (`OllamaEngine` na `url` poda, `name=ollama:<model>`,
+owinięcie buduje create+terminate); bramka UX korektora (`exit 2` bez realnego silnika, furtka
+`MIODEK_ALLOW_STUB_CORRECTOR=1`). ZERO realnej sieci, ZERO realnego poda.
+
+```bash
+python3 tools/check_runpod_ephemeral.py
 ```

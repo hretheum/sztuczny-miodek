@@ -311,6 +311,20 @@ python3 runner.py --manifest manifest.json --engine ollama
 
 Gdy `manage: true` i silnik jest zdalny (`ollama`/`openai`), runner owija przebieg w menedżer kontekstu, który gasi pod ZAWSZE po wsadzie. Odporność na padnięcie procesu zbudowano warstwowo: blok `finally` (gasi też przy wyjątku), handlery SIGINT/SIGTERM (gaszą przed zniknięciem procesu i przywracają poprzedni handler), oraz backstop NA PODZIE (`tools/runpod_idle_watchdog.sh`) gaszący pod po `idle_backstop_s` bezczynności na wypadek `kill -9`. Polityka `on_finish`: `stop` (domyślne, GPU gaśnie, model zostaje na dysku) albo `terminate` (trwała kasacja). Błąd gaszenia leci głośno na stderr, bo to bramka kosztowa. Klucz API czytany wyłącznie z ENV (`RUNPOD_API_KEY`). Szczegóły: `runpod-lifecycle.schema.md`; instalacja watchdoga na podzie: `tools/runpod_idle_watchdog.README.md`.
 
+### Efemeryczny pod jednym krokiem: flaga `--runpod` (KAN-222)
+
+Dotąd, żeby osądzić tekst realnym Bielikiem, trzeba było ręcznie: postawić pod (`tools/runpod_pod_up.py`), wpisać host do `config.json`, uruchomić przebieg i zgasić pod. Flaga `--runpod` składa to w jeden krok. Stawia efemeryczny pod z wolumenu sieciowego (model nie jest pobierany, jeśli już leży na wolumenie), uruchamia przebieg na realnym silniku (Ollama na podzie) i gasi pod automatycznie przez `terminate` po zakończeniu.
+
+Parametry poda czyta podsekcja `stage2.runpod` z `config.json` (wolumen, data center, model, GPU, mount, obraz) z bezpiecznymi domyślnymi, więc flaga działa od ręki. Cykl to create, czekanie na Ollamę, zapewnienie modelu, przebieg, terminate. Teardown jest gwarantowany tą samą warstwową odpornością co auto-offload (blok `finally`, handlery sygnałów, backstop na podzie), z dodatkowym sprzątaniem osieroconego poda: gdy Ollama nie wstanie albo modelu nie da się zapewnić w fazie wejścia, już utworzony pod jest terminowany przed zgłoszeniem błędu. Klucz API wyłącznie z ENV (`RUNPOD_API_KEY`).
+
+```bash
+python3 runner.py --manifest manifest.json --runpod            # osąd na świeżym efemerycznym Bieliku
+python3 corrector.py --file artykul.md --runpod                # korekta realnym Bielikiem, pod gaśnie sam
+python3 tools/publish_gate.py --runpod artykul.md              # --runpod sam włącza Stage 2 na podzie
+```
+
+Flaga nadpisuje `--engine` i sekcję `lifecycle` (efemeryczny pod sam jest owijaczem przebiegu). Bez `--runpod` zachowanie jest bez zmian: domyślnie stub, zero sieci, zero kosztu. Szczegóły cyklu i testu offline: `runpod-lifecycle.schema.md` (sekcja „Tryb EFEMERYCZNY"); parametry poda: `config.schema.md` (podsekcja `stage2.runpod`).
+
 ### Routing silnika: lejek kosztowy (G3)
 
 Stage 2 da się prowadzić dwoma silnikami naraz, żeby mocny model dotykał tylko trudnego marginesu. Silnik `routing` owija dwa silniki za tym samym interfejsem: `primary` (lekki, lokalny, na przykład Bielik przez Ollama) osądza każdy segment, a `appellate` (mocniejszy sędzia apelacyjny) jest wołany tylko po eskalacji. Domyślna polityka eskaluje, gdy primary chce ruszyć tekst (werdykt `rewrite`, czyli potencjalny fałszywy alarm) albo gdy segment jest trudny (liczba trafień review co najmniej `hard_hits_threshold`). Po eskalacji werdykt apelacji jest ostateczny, więc sędzia tnie fałszywe alarmy primary. Gdy primary daje `pass` na łatwym segmencie, appellate nie jest wołany. To obniża koszt rozumowy: mocny model dotyka tylko marginesu.
@@ -340,10 +354,12 @@ Pętla zatrzymuje się w jednym z trzech przypadków. Pierwszy to PASS, czyli br
 Silnik jest wymienny przez ten sam interfejs co osąd Stage 2. Korektor woła go wyłącznie przez `judge` i `rewrite`. Domyślny silnik z configu (`stub`) daje deterministyczną atrapę offline (`StubRewriteEngine`), która neutralizuje wykryty wzorzec tak, by ponowny audyt go nie łapał, więc pętla zbiega bez sieci. Realny model (`openai`/`ollama`) wpina się bez zmiany pętli: dostaje osobny prompt po polsku „przepisz akapit usuwając manieryzm, zachowaj sens i rejestr".
 
 ```bash
-python3 corrector.py --file artykul.md                 # silnik z config.json (stub = offline)
-python3 corrector.py --file artykul.md --in-place       # zapisz poprawiony tekst do pliku
 python3 corrector.py --file artykul.md --engine ollama  # korekta realnym modelem (sieć)
+python3 corrector.py --file artykul.md --runpod         # realny Bielik na efemerycznym podzie (KAN-222)
+python3 corrector.py --file artykul.md --runpod --in-place  # plus zapis poprawionego tekstu do pliku
 ```
+
+Bramka UX (KAN-222): korektor mieli tekst, więc na atrapie (stub) nic realnie nie poprawi i nie wolno mu udawać pracy. Bez `--runpod` i bez jawnie wskazanego realnego silnika (`stage2.engine` na `ollama`/`openai` w `config.json` albo `--engine ollama/openai`) korektor odmawia z kodem wyjścia 2 i kieruje: użyj `--runpod` (efemeryczny Bielik jednym krokiem) albo ustaw realny silnik. Stub zostaje trybem testowym, nie ścieżką użytkownika (furtka self-testów: zmienna `MIODEK_ALLOW_STUB_CORRECTOR=1`). Runner i bramka publikacji tej odmowy nie mają, bo osąd na atrapie bywa tam legalny jako diagnostyka. Odmowa dotyczy tylko korektora, który przepisuje tekst.
 
 Zakres korektora to proza klasy review. Twarde blokery Stage 1 spoza prozy zostają nietknięte: emoji w nagłówku, cyrylica czy struktura nie-akapitowa to robota lintera i autora, bo korektor przepisuje wyłącznie sporne akapity. Dlatego dokument z czystą już prozą, ale z emoji w nagłówku, da PASS na bramce Stage 2 korektora i wciąż FAIL na pełnym werdykcie lintera. To podział celowy.
 

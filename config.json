@@ -83,6 +83,17 @@
       "ensure_running": true,
       "idle_backstop_s": 600,
       "api_key_env": "RUNPOD_API_KEY"
+    },
+    "runpod": {
+      "opis": "Parametry EFEMERYCZNEGO poda dla flagi --runpod (KAN-222): jeden krok zamiast ręcznej sekwencji. Postaw pod z wolumenu (model NIE pobierany, jeśli już leży na wolumenie), uruchom realny przebieg Stage 2 na Ollamie, zgaś (terminate) automatycznie. volume/dc/model jak w launcherze tools/runpod_pod_up.py. Klucz API z ENV (api_key_env), NIGDY z pliku.",
+      "volume": "5lb05arqur",
+      "dc": "EU-NL-1",
+      "mount": "/root/.ollama",
+      "image": "ollama/ollama:latest",
+      "model": "hf.co/speakleash/Bielik-11B-v3.0-Instruct-GGUF:Q4_K_M",
+      "name": "miodek-bielik",
+      "api_key_env": "RUNPOD_API_KEY",
+      "base_url": "https://rest.runpod.io/v1"
     }
   }
 }

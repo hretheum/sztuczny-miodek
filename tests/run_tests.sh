@@ -135,6 +135,13 @@ else
   echo "FAIL auto-offload — klient REST, teardown w finally/sygnale, idempotencja, on_finish, load_lifecycle lub NO-OP manage=false rozjechał się (patrz wyżej)"; fail=1
 fi
 
+echo "== Efemeryczny pod RunPod + flaga --runpod: create/terminate + bramka UX korektora (KAN-222) =="
+if python3 "$DIR/../tools/check_runpod_ephemeral.py"; then
+  : # OK — komunikat wypisuje sam skrypt
+else
+  echo "FAIL efemeryczny pod / --runpod — managed_ephemeral_pod nie tworzy/terminuje (też przy wyjątku, osierocony pod), idempotencja teardownu, load_runpod (fallback/walidacja), build_ephemeral_runpod/build_runpod_engine albo bramka UX korektora (odmowa bez silnika) rozjechały się (patrz wyżej)"; fail=1
+fi
+
 echo "== Bramka write-time: blokuje tylko twarde blokery, sama gęstość NIE (F1) =="
 if python3 "$DIR/../tools/check_write_gate.py"; then
   : # OK — komunikat wypisuje sam skrypt

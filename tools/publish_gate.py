@@ -120,6 +120,13 @@ def main(argv=None):
     )
     parser.add_argument("--config", default=config.CONFIG_PATH,
                         help="Ścieżka do config.json (sekcja stage2). Domyślnie config repo.")
+    parser.add_argument(
+        "--runpod", action="store_true",
+        help="KAN-222: jeden krok zamiast ręcznej sekwencji. Włącza Stage 2 i osądza na "
+             "EFEMERYCZNYM podzie RunPod (parametry stage2.runpod): postaw pod z wolumenu, "
+             "osądź realnym Bielikiem (Ollama), zgaś pod automatycznie. Nadpisuje --engine i "
+             "lifecycle. Wymaga RUNPOD_API_KEY w ENV.",
+    )
     args = parser.parse_args(argv)
 
     files = ci_gate.filter_prose(args.paths)
@@ -149,8 +156,9 @@ def main(argv=None):
         return 1
     print("[publish_gate] Stage 1: PASS.")
 
-    # --- Stage 2: opcjonalny osąd modelu (tylko z --stage2). ---
-    if not args.stage2:
+    # --- Stage 2: opcjonalny osąd modelu (tylko z --stage2 LUB --runpod). ---
+    # KAN-222: --runpod sam włącza Stage 2 (efemeryczny pod ma sens tylko dla osądu modelu).
+    if not args.stage2 and not args.runpod:
         print("[publish_gate] Stage 2 wyłączony (brak --stage2). "
               "PUBLIKACJA DOZWOLONA — Stage 1 PASS (exit 0).")
         return 0
@@ -159,18 +167,32 @@ def main(argv=None):
     print("[publish_gate] Stage 2 — osąd modelu na segmentach review:")
     try:
         manifest = build_manifest(files, args.lang, args.profile, args.dict_path)
-        engine = runner.build_engine_from_config(name=args.engine, config_path=args.config)
     except RuntimeError as e:
         print(f"[publish_gate] BŁĄD manifestu Stage 2: {e}. PUBLIKACJA WSTRZYMANA (exit 2).")
         return 2
-    except ValueError as e:
-        # Np. openai bez base_url/model w config.json — świadomy błąd konfiguracji, zero sieci.
-        print(f"[publish_gate] BŁĄD budowy silnika Stage 2: {e}. PUBLIKACJA WSTRZYMANA (exit 2).")
-        return 2
 
-    # run_stage2_managed: osąd + auto-offload poda RunPod (KAN-220) dla silników zdalnych.
-    # Za atrapą/lokalnym silnikiem to czysty run_stage2 (NO-OP lifecycle), zero sieci.
-    result = runner.run_stage2_managed(manifest, engine=engine, config_path=args.config)
+    if args.runpod:
+        # KAN-222: efemeryczny pod SAM owija przebieg (create→...→terminate). Wewnątrz wołamy
+        # CZYSTY run_stage2 na realnym Bieliku. Pod gaśnie automatycznie po osądzie.
+        try:
+            with runner.build_ephemeral_runpod(args.config) as pod:
+                engine = runner.build_runpod_engine(args.config, pod=pod)
+                result = runner.run_stage2(manifest, engine=engine)
+        except ValueError as e:
+            print(f"[publish_gate] BŁĄD konfiguracji efemerycznego poda: {e}. "
+                  "PUBLIKACJA WSTRZYMANA (exit 2).")
+            return 2
+    else:
+        try:
+            engine = runner.build_engine_from_config(name=args.engine, config_path=args.config)
+        except ValueError as e:
+            # Np. openai bez base_url/model w config.json — świadomy błąd konfiguracji, zero sieci.
+            print(f"[publish_gate] BŁĄD budowy silnika Stage 2: {e}. PUBLIKACJA WSTRZYMANA (exit 2).")
+            return 2
+
+        # run_stage2_managed: osąd + auto-offload poda RunPod (KAN-220) dla silników zdalnych.
+        # Za atrapą/lokalnym silnikiem to czysty run_stage2 (NO-OP lifecycle), zero sieci.
+        result = runner.run_stage2_managed(manifest, engine=engine, config_path=args.config)
 
     for seg in result["segments"]:
         ids = ", ".join(str(i) for i in seg["hit_ids"])

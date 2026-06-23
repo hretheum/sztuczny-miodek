@@ -101,6 +101,49 @@ Rodzeństwo `economy`. Wskazuje, którym silnikiem osądzać Stage 2. Czytana os
 - Konsument: `runner.build_engine_from_config` (CLI `runner.py --engine ... --config ...`).
   Kontrakt adapterów: `engines.schema.md`.
 
+## Podsekcja `stage2.runpod` — efemeryczny pod dla `--runpod` (KAN-222)
+
+Parametry, z których flaga `--runpod` stawia EFEMERYCZNY pod RunPod (`managed_ephemeral_pod`):
+jeden krok zamiast ręcznej sekwencji (postaw pod z wolumenu, osądź realnym Bielikiem przez Ollamę,
+zgaś pod automatycznie). Czytana osobną funkcją `config.load_runpod(path)`, więc `load_thresholds`
+(D1), `load_economy` (E4), `load_stage2` (KAN-218) i `load_lifecycle` (KAN-220) zostają NIETKNIĘTE.
+
+```json
+"stage2": {
+  "runpod": {
+    "volume": "5lb05arqur",
+    "dc": "EU-NL-1",
+    "mount": "/root/.ollama",
+    "image": "ollama/ollama:latest",
+    "model": "hf.co/speakleash/Bielik-11B-v3.0-Instruct-GGUF:Q4_K_M",
+    "name": "miodek-bielik",
+    "api_key_env": "RUNPOD_API_KEY",
+    "base_url": "https://rest.runpod.io/v1"
+  }
+}
+```
+
+| Klucz | Typ | Znaczenie | Default |
+|---|---|---|---|
+| `volume` | string (niepusty) | ID wolumenu sieciowego (model leży tu trwale, nie pobierany ponownie) | `5lb05arqur` |
+| `dc` | string (niepusty) | data center wolumenu (pod musi tu stanąć) | `EU-NL-1` |
+| `model` | string (niepusty) | tag modelu Ollamy (ten sam dla `ensure_model` i `OllamaEngine`) | Bielik GGUF Q4_K_M |
+| `mount` | string | mount wolumenu (modele Ollamy) | `/root/.ollama` |
+| `image` | string | obraz kontenera | `ollama/ollama:latest` |
+| `gpu` | lista stringów | dozwolone GPU (RunPod wybiera dostępne); brak → `DEFAULT_GPUS` launchera | — |
+| `name` | string | nazwa poda | `miodek-bielik` |
+| `api_key_env` | string | nazwa ENV z kluczem (sekret NIGDY w pliku) | `RUNPOD_API_KEY` |
+| `base_url` | string | baza REST RunPod | `https://rest.runpod.io/v1` |
+
+- Brak `config.json`, brak `stage2` lub brak podsekcji `runpod` → `config.DEFAULT_RUNPOD` (= wartości
+  launchera `tools/runpod_pod_up.py`). Klucze obecne w configu nadpisują domyślne PUNKTOWO (operator
+  może podać tylko `volume`+`dc`, reszta z domyślnych).
+- Walidacja kluczy load-bearing: `volume`, `dc`, `model` muszą być niepustymi stringami; `gpu` (jeśli
+  obecny) listą stringów. Niepoprawne → `ValueError`.
+- Konsument: `runner.build_ephemeral_runpod` + `runner.build_runpod_engine` (flaga `--runpod` w
+  `runner.py`, `corrector.py`, `tools/publish_gate.py`). Cykl i teardown: `runpod-lifecycle.schema.md`
+  (sekcja „Tryb EFEMERYCZNY").
+
 ## Styk z resztą systemu
 
 - **B3 (kalibracja progów)**: metodyka z `docs/THRESHOLD-CALIBRATION.md` zakłada, że kalibracja na

@@ -319,6 +319,11 @@ def _main(argv=None):
                          "sieci — świadomy wybór operatora.")
     ap.add_argument("--config", default=config.CONFIG_PATH,
                     help="Ścieżka do config.json. Domyślnie config repo.")
+    ap.add_argument("--runpod", action="store_true",
+                    help="KAN-222: jeden krok zamiast ręcznej sekwencji. Postaw EFEMERYCZNY pod "
+                         "z wolumenu (parametry stage2.runpod), popraw tekst realnym Bielikiem "
+                         "(Ollama), zgaś pod automatycznie. Nadpisuje --engine. Wymaga "
+                         "RUNPOD_API_KEY w ENV.")
     ap.add_argument("--in-place", action="store_true",
                     help="Zapisz poprawiony tekst z powrotem do pliku (domyślnie tylko wypisz).")
     args = ap.parse_args(argv)
@@ -331,14 +336,43 @@ def _main(argv=None):
         cfg = config.load_stage2(args.config)
         max_iter = int(cfg.get("max_iter", DEFAULT_MAX_ITER))
 
-    engine = build_corrector_engine(name=args.engine, config_path=args.config)
-    audit_fn = make_default_audit(lang=args.lang, profile=args.profile, dict_path=args.dict_path)
-    stage2_fn = _make_managed_stage2(args.config)
+    # BRAMKA UX (KAN-222): korektor MIELI tekst. Na atrapie (stub) nic realnie nie poprawi —
+    # nie wolno mu mleć po cichu i udawać pracy. Bez --runpod i bez jawnie skonfigurowanego
+    # realnego silnika (ollama/openai z config.json LUB --engine) ODMAWIAMY i kierujemy. Stub
+    # zostaje trybem TESTOWYM: furtka MIODEK_ALLOW_STUB_CORRECTOR=1 (self-testy korektora).
+    if not args.runpod:
+        engine_cfg = config.load_stage2(args.config).get("engine", "stub")
+        explicit_real = args.engine in ("openai", "ollama") or engine_cfg in ("openai", "ollama")
+        allow_stub = os.environ.get("MIODEK_ALLOW_STUB_CORRECTOR") == "1"
+        if not explicit_real and not allow_stub:
+            print(
+                "[corrector] ODMOWA: brak realnego silnika. Korektor na atrapie (stub) nic nie "
+                "poprawi — nie będzie mielił po cichu.\n"
+                "  Użyj --runpod (efemeryczny Bielik na RunPodzie, jeden krok) ALBO ustaw "
+                "stage2.engine na ollama/openai w config.json (lub --engine ollama/openai).",
+                file=sys.stderr,
+            )
+            sys.exit(2)
 
-    res = correct_document(
-        text, file_path=args.file, engine=engine,
-        audit_fn=audit_fn, max_iter=max_iter, stage2_fn=stage2_fn,
-    )
+    if args.runpod:
+        # KAN-222: efemeryczny pod SAM owija przebieg (create→...→terminate). Wewnątrz wołamy
+        # CZYSTY run_stage2 jako stage2_fn (pod już zarządzany przez ten kontekst).
+        audit_fn = make_default_audit(lang=args.lang, profile=args.profile, dict_path=args.dict_path)
+        with runner.build_ephemeral_runpod(args.config) as pod:
+            engine = runner.build_runpod_engine(args.config, pod=pod)
+            res = correct_document(
+                text, file_path=args.file, engine=engine,
+                audit_fn=audit_fn, max_iter=max_iter, stage2_fn=runner.run_stage2,
+            )
+    else:
+        engine = build_corrector_engine(name=args.engine, config_path=args.config)
+        audit_fn = make_default_audit(lang=args.lang, profile=args.profile, dict_path=args.dict_path)
+        stage2_fn = _make_managed_stage2(args.config)
+
+        res = correct_document(
+            text, file_path=args.file, engine=engine,
+            audit_fn=audit_fn, max_iter=max_iter, stage2_fn=stage2_fn,
+        )
 
     if args.in_place:
         with open(args.file, "w", encoding="utf-8") as f:

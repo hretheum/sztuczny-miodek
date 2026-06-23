@@ -35,6 +35,10 @@ import os
 import signal
 import sys
 
+_THIS_DIR = os.path.dirname(os.path.abspath(__file__))
+if _THIS_DIR not in sys.path:
+    sys.path.insert(0, _THIS_DIR)
+
 # Baza REST RunPod (REST API v1). Auth: nagłówek Authorization: Bearer <RUNPOD_API_KEY>.
 DEFAULT_BASE_URL = "https://rest.runpod.io/v1"
 DEFAULT_API_KEY_ENV = "RUNPOD_API_KEY"
@@ -140,7 +144,58 @@ class RunPodClient:
         return ds if ds is not None else data
 
 
-class managed_pod:
+class _SignalTeardownMixin:
+    """Wspólne warstwy 2 teardownu (handlery SIGINT/SIGTERM) dla menedżerów kontekstu poda.
+
+    Wydzielone z `managed_pod`, by `managed_ephemeral_pod` (KAN-222) miało TĘ SAMĄ odporność
+    (KAN-220) bez duplikacji: instalacja/przywrócenie/handler sygnałów + flaga `_torn_down`.
+    Klasa pochodna MUSI zdefiniować `_teardown(self)` (gaszenie wg własnej polityki) oraz w
+    konstruktorze ustawić `self._torn_down = False` i `self._prev_handlers = {}`.
+
+    INWARIANTY:
+      - handlery SIGINT/SIGTERM wołają teardown, przywracają poprzedni handler i RE-RAISUJĄ sygnał,
+      - instalacja działa tylko w głównym wątku (ograniczenie modułu signal); poza nim po cichu
+        pomijana — warstwa 1 (finally) i warstwa 3 (watchdog na podzie) zostają.
+    """
+
+    def _install_signal_handlers(self):
+        """Instaluje handlery SIGINT/SIGTERM, zapamiętując poprzednie (do przywrócenia)."""
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            try:
+                self._prev_handlers[sig] = signal.getsignal(sig)
+                signal.signal(sig, self._signal_handler)
+            except (ValueError, OSError):
+                # np. nie główny wątek — pomijamy instalację dla tego sygnału.
+                self._prev_handlers.pop(sig, None)
+
+    def _restore_signal_handlers(self):
+        """Przywraca poprzednie handlery SIGINT/SIGTERM (nie połykamy sygnału na stałe)."""
+        for sig, prev in list(self._prev_handlers.items()):
+            try:
+                signal.signal(sig, prev)
+            except (ValueError, OSError):
+                pass
+        self._prev_handlers.clear()
+
+    def _signal_handler(self, signum, frame):
+        """Handler SIGINT/SIGTERM: gasi pod, przywraca poprzedni handler i RE-RAISUJE sygnał.
+
+        Re-raise (os.kill(getpid, signum)) zachowuje normalną semantykę sygnału (np. domyślne
+        zakończenie procesu / KeyboardInterrupt) — nie połykamy sygnału na stałe."""
+        try:
+            self._teardown()
+        finally:
+            prev = self._prev_handlers.get(signum)
+            try:
+                if prev is not None:
+                    signal.signal(signum, prev)
+                    self._prev_handlers.pop(signum, None)
+            except (ValueError, OSError):
+                pass
+            os.kill(os.getpid(), signum)
+
+
+class managed_pod(_SignalTeardownMixin):
     """Menedżer kontekstu auto-offloadu poda RunPod (trzy warstwy teardownu — patrz docstring modułu).
 
     Użycie:
@@ -219,47 +274,7 @@ class managed_pod:
             self._restore_signal_handlers()
         return False  # NIE połykaj wyjątku — niech propaguje
 
-    # ---- Warstwa 2: handlery sygnałów ----
-
-    def _install_signal_handlers(self):
-        """Instaluje handlery SIGINT/SIGTERM, zapamiętując poprzednie (do przywrócenia).
-
-        Instalacja sygnałów działa tylko w głównym wątku procesu (ograniczenie modułu signal);
-        w innym wątku po cichu pomijamy — warstwa 1 (finally) i warstwa 3 (watchdog) zostają."""
-        for sig in (signal.SIGINT, signal.SIGTERM):
-            try:
-                self._prev_handlers[sig] = signal.getsignal(sig)
-                signal.signal(sig, self._signal_handler)
-            except (ValueError, OSError):
-                # np. nie główny wątek — pomijamy instalację dla tego sygnału.
-                self._prev_handlers.pop(sig, None)
-
-    def _restore_signal_handlers(self):
-        """Przywraca poprzednie handlery SIGINT/SIGTERM (nie połykamy sygnału na stałe)."""
-        for sig, prev in list(self._prev_handlers.items()):
-            try:
-                signal.signal(sig, prev)
-            except (ValueError, OSError):
-                pass
-        self._prev_handlers.clear()
-
-    def _signal_handler(self, signum, frame):
-        """Handler SIGINT/SIGTERM: gasi pod, przywraca poprzedni handler i RE-RAISUJE sygnał.
-
-        Re-raise (os.kill(getpid, signum)) zachowuje normalną semantykę sygnału (np. domyślne
-        zakończenie procesu / KeyboardInterrupt) — nie połykamy sygnału na stałe."""
-        try:
-            self._teardown()
-        finally:
-            prev = self._prev_handlers.get(signum)
-            # Przywróć poprzedni handler tego sygnału, potem re-raise.
-            try:
-                if prev is not None:
-                    signal.signal(signum, prev)
-                    self._prev_handlers.pop(signum, None)
-            except (ValueError, OSError):
-                pass
-            os.kill(os.getpid(), signum)
+    # ---- Warstwa 2: handlery sygnałów (wspólne, w _SignalTeardownMixin) ----
 
     # ---- Teardown bezpieczny do wielokrotnego wywołania ----
 
@@ -299,3 +314,177 @@ def build_client_from_lifecycle(cfg, transport=None):
         base_url=cfg.get("base_url", DEFAULT_BASE_URL),
         transport=transport,
     )
+
+
+# ============================================================================
+# KAN-222 — EFEMERYCZNY pod (jeden krok zamiast ręcznej sekwencji, flaga --runpod).
+# ============================================================================
+#
+# Inny cykl życia niż managed_pod: tamto ZARZĄDZA istniejącym podem (start/stop/terminate),
+# to TWORZY pod na wejściu i TERMINUJE na wyjściu. Reużywa launcher tools/runpod_pod_up.py
+# (create_pod/wait_for_ollama/ensure_model) — zero duplikacji logiki stawiania.
+
+
+class managed_ephemeral_pod(_SignalTeardownMixin):
+    """Menedżer kontekstu EFEMERYCZNEGO poda RunPod (KAN-222): create → wait → ensure_model →
+    (przebieg) → TERMINATE. Ten sam warstwowy teardown co managed_pod (finally + sygnały +
+    bezpieczeństwo wielokrotnego wywołania, KAN-220), tylko że gasimy przez `terminate` (kasacja
+    efemerycznego poda — nie ma czego zachowywać poza wolumenem sieciowym z modelem).
+
+    Użycie (flaga --runpod):
+        ctx = managed_ephemeral_pod(api_key_env="RUNPOD_API_KEY", volume_id="...", dc="EU-NL-1",
+                                    mount="/root/.ollama", image="ollama/ollama:latest",
+                                    model="hf.co/.../Bielik-...-GGUF:Q4_K_M")
+        with ctx as pod:
+            engine = OllamaEngine(host=pod.url, model=...)
+            result = run_stage2(manifest, engine=engine)
+        # tu pod jest już zterminowany — także przy wyjątku / SIGTERM.
+
+    GWARANCJA braku osieroconego poda: jeśli `wait_for_ollama`/`ensure_model` zawiodą w __enter__,
+    JUŻ utworzony pod jest terminowany PRZED rzuceniem RuntimeError (inaczej pod bije pod prąd, a
+    proces nie wszedł nawet w `with`, więc finally by go nie dotknęło). Plus: __exit__/finally,
+    handler sygnału, flaga `_torn_down` (realny terminate raz).
+
+    Klucz API z ENV (`api_key_env`) — sekret NIGDY w pliku/argumencie (spójnie z RunPodClient).
+    Warstwa REST WSTRZYKIWALNA dla testów offline:
+      - `pod_up` (domyślnie moduł runpod_pod_up): test podstawia atrapę z create_pod/wait/ensure,
+      - `client_transport` (do RunPodClient.terminate): atrapa REST zapisująca wywołania.
+    Pod żadną atrapą realna sieć (urllib) nie jest dotykana.
+    """
+
+    def __init__(self, *, api_key_env=DEFAULT_API_KEY_ENV, base_url=DEFAULT_BASE_URL,
+                 volume_id, dc, mount="/root/.ollama", image="ollama/ollama:latest",
+                 model="hf.co/speakleash/Bielik-11B-v3.0-Instruct-GGUF:Q4_K_M",
+                 gpus=None, name="miodek-bielik", no_model=False,
+                 client_transport=None, pod_up=None, wait_kwargs=None):
+        if not volume_id:
+            raise ValueError("managed_ephemeral_pod wymaga niepustego volume_id")
+        if not dc:
+            raise ValueError("managed_ephemeral_pod wymaga niepustego dc (data center)")
+        if not model and not no_model:
+            raise ValueError("managed_ephemeral_pod wymaga model (albo no_model=True)")
+        self._api_key_env = api_key_env
+        self.base_url = base_url
+        self.volume_id = volume_id
+        self.dc = dc
+        self.mount = mount
+        self.image = image
+        self.model = model
+        self.no_model = no_model
+        self.name = name
+        # Lazy-import launchera, by uniknąć cyklu importów na poziomie modułu (i pozwolić wstrzyknąć).
+        # Launcher żyje w tools/ — dokładamy ten katalog do path tylko przy realnym imporcie.
+        if pod_up is None:
+            _tools_dir = os.path.join(_THIS_DIR, "tools")
+            if _tools_dir not in sys.path:
+                sys.path.insert(0, _tools_dir)
+            import runpod_pod_up as pod_up  # noqa: E402
+        self._pod_up = pod_up
+        self.gpus = gpus if gpus is not None else list(pod_up.DEFAULT_GPUS)
+        self._client_transport = client_transport
+        self._wait_kwargs = dict(wait_kwargs or {})
+        # Klient REST do TERMINATE — klucz z ENV w konstruktorze (separacja config=CO, ENV=SEKRET).
+        self._client = RunPodClient(
+            api_key_env=api_key_env, base_url=base_url, transport=client_transport
+        )
+        self.url = None
+        self.pod_id = None
+        self._torn_down = False
+        self._prev_handlers = {}
+
+    @classmethod
+    def from_config(cls, cfg, *, client_transport=None, pod_up=None, wait_kwargs=None):
+        """Buduje menedżera z sekcji config `stage2.runpod` (dict z config.load_runpod)."""
+        return cls(
+            api_key_env=cfg.get("api_key_env", DEFAULT_API_KEY_ENV),
+            base_url=cfg.get("base_url", DEFAULT_BASE_URL),
+            volume_id=cfg.get("volume"),
+            dc=cfg.get("dc"),
+            mount=cfg.get("mount", "/root/.ollama"),
+            image=cfg.get("image", "ollama/ollama:latest"),
+            model=cfg.get("model"),
+            gpus=cfg.get("gpu"),
+            name=cfg.get("name", "miodek-bielik"),
+            no_model=bool(cfg.get("no_model", False)),
+            client_transport=client_transport,
+            pod_up=pod_up,
+            wait_kwargs=wait_kwargs,
+        )
+
+    # ---- Warstwa 1: kontekst (create na wejściu, terminate w finally) ----
+
+    def __enter__(self):
+        api_key = os.environ.get(self._api_key_env, "")
+        if not api_key:
+            raise RuntimeError(
+                f"managed_ephemeral_pod: brak klucza API w ENV {self._api_key_env!r} "
+                f"(sekret czytany WYŁĄCZNIE z ENV, nigdy z pliku)"
+            )
+        # 1. Postaw pod (z wolumenu — model nie jest pobierany, jeśli już leży na wolumenie).
+        pod = self._pod_up.create_pod(
+            api_key, self.volume_id, self.dc, self.mount, self.image,
+            self.gpus, self.name, transport=self._client_transport,
+        )
+        self.pod_id = pod["id"]  # launcher czyta pod["id"] (NIE podId) — spójnie.
+        self.url = f"https://{self.pod_id}-11434.proxy.runpod.net"
+        print(
+            f"[managed_ephemeral_pod] utworzony efemeryczny pod {self.pod_id} "
+            f"(DC {self.dc}, wolumen {self.volume_id})",
+            file=sys.stderr,
+        )
+        # Handlery sygnałów instalujemy ZARAZ po utworzeniu poda — od tej chwili SIGTERM ma go zgasić.
+        self._install_signal_handlers()
+        # 2. Czekaj na Ollamę; 3. zapewnij model. Błąd => zterminuj osierocony pod PRZED rzuceniem.
+        try:
+            if not self._pod_up.wait_for_ollama(self.url, **self._wait_kwargs):
+                raise RuntimeError(
+                    f"managed_ephemeral_pod: Ollama nie wstała na {self.url} "
+                    f"(pod {self.pod_id} zostanie zterminowany)"
+                )
+            if not self.no_model:
+                if not self._pod_up.ensure_model(self.url, self.model):
+                    raise RuntimeError(
+                        f"managed_ephemeral_pod: nie udało się zapewnić modelu {self.model} "
+                        f"na {self.url} (pod {self.pod_id} zostanie zterminowany)"
+                    )
+        except BaseException:
+            # Sprzątanie osieroconego poda: terminate PRZED propagacją (finally by go nie dotknęło,
+            # bo proces nie wszedł w blok `with`). Restore handlerów, by nie zostawić ich na stałe.
+            self._teardown()
+            self._restore_signal_handlers()
+            raise
+        print(
+            f"[managed_ephemeral_pod] pod {self.pod_id} gotowy (Ollama + model {self.model})",
+            file=sys.stderr,
+        )
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        try:
+            self._teardown()  # ZAWSZE — także przy wyjątku w bloku with
+        finally:
+            self._restore_signal_handlers()
+        return False  # NIE połykaj wyjątku — niech propaguje
+
+    # ---- Teardown bezpieczny do wielokrotnego wywołania ----
+
+    def _teardown(self):
+        """TERMINUJE efemeryczny pod. Bezpieczny do wielokrotnego wywołania (flaga _torn_down):
+
+        pierwsze wejście ustawia flagę PRZED realnym wywołaniem i woła client.terminate; każde
+        kolejne to NO-OP. Gdy pod jeszcze nie powstał (create_pod nie zwrócił id), nie ma czego
+        gasić. Błąd terminacji leci GŁOŚNO na stderr — to bramka KOSZTOWA GPU (nieugaszony pod)."""
+        if self._torn_down:
+            return
+        self._torn_down = True
+        if not self.pod_id:
+            return  # pod nie powstał — nic do gaszenia
+        try:
+            self._client.terminate(self.pod_id)
+        except Exception as e:
+            print(
+                f"[managed_ephemeral_pod] BŁĄD TEARDOWNU: nie udało się zterminować poda "
+                f"{self.pod_id}: {e} — POD MOŻE NADAL BIĆ POD PRĄD GPU, sprawdź ręcznie "
+                f"(REST DELETE / panel RunPod).",
+                file=sys.stderr,
+            )

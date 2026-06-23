@@ -340,6 +340,82 @@ def load_lifecycle(path: str = CONFIG_PATH) -> dict:
     return lc
 
 
+# ============================================================================
+# KAN-222 — efemeryczny pod RunPod dla flagi --runpod (podsekcja `stage2.runpod`).
+# ============================================================================
+#
+# Podsekcja `runpod` żyje WEWNĄTRZ `stage2` (rodzeństwo `lifecycle`). Trzyma parametry, z których
+# flaga --runpod stawia EFEMERYCZNY pod (managed_ephemeral_pod): wolumen sieciowy (model), DC,
+# model, GPU, mount, obraz. Czytana OSOBNĄ funkcją load_runpod — load_thresholds/economy/stage2/
+# lifecycle zostają NIETKNIĘTE.
+#
+# Domyślne = wartości z launchera tools/runpod_pod_up.py (wolumen i model jak w przykładzie użycia),
+# więc bez configu flaga --runpod działa „od ręki". Klucz API NIGDY w pliku — config trzyma tylko
+# nazwę ENV (`api_key_env`); sekret czyta konstruktor klienta/menedżera z os.environ.
+
+DEFAULT_RUNPOD = {
+    "volume": "5lb05arqur",
+    "dc": "EU-NL-1",
+    "mount": "/root/.ollama",
+    "image": "ollama/ollama:latest",
+    "model": "hf.co/speakleash/Bielik-11B-v3.0-Instruct-GGUF:Q4_K_M",
+    "name": "miodek-bielik",
+    "api_key_env": "RUNPOD_API_KEY",
+    "base_url": "https://rest.runpod.io/v1",
+}
+
+
+def load_runpod(path: str = CONFIG_PATH) -> dict:
+    """Zwraca konfigurację efemerycznego poda dla --runpod (podsekcja `stage2.runpod`).
+
+    Brak configu, brak sekcji `stage2` albo brak podsekcji `runpod` → DEFAULT_RUNPOD (bezpieczny
+    fallback = wartości launchera). Klucze obecne w configu nadpisują domyślne PUNKTOWO (tolerancyjnie,
+    spójnie z load_economy): operator może podać tylko `volume`+`dc`, reszta z domyślnych.
+
+    Walidacja kluczy load-bearing (bez nich nie da się postawić poda): `volume`, `dc`, `model`
+    muszą być niepustymi stringami. `gpu` (jeśli obecny) musi być listą stringów. Niepoprawne →
+    czytelny ValueError. Zwraca surowy scalony dict (menedżer buduje z niego managed_ephemeral_pod;
+    ENV czyta dopiero konstruktor)."""
+    out = dict(DEFAULT_RUNPOD)
+    if not os.path.exists(path):
+        return out
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            cfg = json.load(f)
+    except (json.JSONDecodeError, OSError) as e:
+        raise ValueError(f"config.json: nie można wczytać: {e}")
+
+    st = cfg.get("stage2")
+    if not isinstance(st, dict):
+        return out
+    rp = st.get("runpod")
+    if rp is None:
+        return out
+    if not isinstance(rp, dict):
+        raise ValueError("config.json: sekcja 'stage2.runpod' musi być obiektem")
+
+    # Scal punktowo (pomijamy klucz informacyjny `opis`).
+    for k, v in rp.items():
+        if k == "opis":
+            continue
+        out[k] = v
+
+    for k in ("volume", "dc", "model"):
+        v = out.get(k)
+        if not isinstance(v, str) or not v:
+            raise ValueError(
+                f"config.json: stage2.runpod.{k} musi być niepustym stringiem, jest {v!r}"
+            )
+    if "gpu" in out and out["gpu"] is not None:
+        g = out["gpu"]
+        if not isinstance(g, list) or not all(isinstance(x, str) for x in g):
+            raise ValueError(
+                f"config.json: stage2.runpod.gpu musi być listą stringów, jest {g!r}"
+            )
+
+    return out
+
+
 def _main():
     """CLI: wypisz progi aktywnego/wskazanego profilu (diagnostyka). --profile <nazwa>."""
     profile = None
