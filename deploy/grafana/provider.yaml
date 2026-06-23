@@ -1,0 +1,29 @@
+# provider.yaml — provisioning provider dashboardów Grafany (KAN-219).
+#
+# Wskazuje Grafanie katalog z dashboardami JSON do automatycznego załadowania.
+# Na mbair Grafana czyta provisioning z /home/mac/grafana/provisioning.
+#
+# INSTALACJA:
+#   cp deploy/grafana/provider.yaml        /home/mac/grafana/provisioning/dashboards/miodek.yaml
+#   cp deploy/grafana/miodek-dashboard.json /home/mac/grafana/provisioning/dashboards/
+#   # przeładuj Grafanę (restart kontenera albo provisioning sam podchwytuje pliki):
+#   #   systemctl --user restart grafana   (zależnie od jednostki/quadletu)
+#
+# `path` to ścieżka WIDZIANA PRZEZ GRAFANĘ (wewnątrz kontenera). Standardowy mount provisioningu
+# w obrazie Grafany to /etc/grafana/provisioning; jeśli host-mount montuje
+# /home/mac/grafana/provisioning -> /etc/grafana/provisioning, dashboardy leżą w podkatalogu `dashboards`.
+
+apiVersion: 1
+
+providers:
+  - name: miodek
+    orgId: 1
+    folder: Sztuczny Miodek
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      # Ścieżka WEWNĄTRZ kontenera Grafany. Dostosuj do swojego mountu provisioningu.
+      path: /etc/grafana/provisioning/dashboards
+      foldersFromFilesStructure: false

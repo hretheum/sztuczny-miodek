@@ -1,0 +1,21 @@
+# miodek-scrape.snippet.yml — fragment scrape do dopisania do /home/mac/prometheus/prometheus.yml.
+#
+# Wklej ten blok do listy `scrape_configs:` w prometheus.yml na mbair, potem przeładuj Prometheusa:
+#   curl -X POST http://localhost:9090/-/reload      # gdy --web.enable-lifecycle
+#   # albo: systemctl --user reload prometheus (zależnie od jednostki)
+#
+# Target zależy od tego, gdzie biegnie eksporter względem Prometheusa:
+#   - eksporter jako GOŁA usługa systemd na hoście, Prometheus w kontenerze podman:
+#       użyj 'host.containers.internal:9112' (most z kontenera do hosta),
+#   - eksporter i Prometheus na tym samym hoście (oba gołe):
+#       użyj 'localhost:9112',
+#   - eksporter też w kontenerze w tej samej sieci podman:
+#       użyj nazwy serwisu, np. 'miodek-exporter:9112'.
+# Domyślnie zostawiamy localhost:9112 (najprostszy przypadek); odkomentuj wariant kontenerowy w razie potrzeby.
+
+- job_name: miodek
+  scrape_interval: 60s
+  metrics_path: /metrics
+  static_configs:
+    - targets: ['localhost:9112']
+      # - targets: ['host.containers.internal:9112']   # Prometheus w kontenerze -> eksporter na hoście

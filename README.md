@@ -236,6 +236,21 @@ python3 tools/measure_health.py --manifest manifest.json
 python3 tools/measure_health.py --manifest manifest.json --alarm 0.08    # nadpisz próg
 ```
 
+### Eksporter metryk Prometheus i dashboard Grafany (KAN-219)
+
+Te same metryki da się podać na dashboard. `tools/metrics_exporter.py` to eksporter HTTP zero-dep (biblioteka standardowa, `http.server`), który na ścieżce `/metrics` wystawia format tekstowy Prometheus. Na scrape buduje manifest (uruchamia linter na korpusie, z krótkim cache, żeby nie mielić go na każde zapytanie), liczy `metrics.py` i doczytuje log Stage 2. Stack Prometheus plus Grafana zakładamy gotowy; tu dostarczamy artefakty do wpięcia.
+
+```bash
+MIODEK_CORPUS=. MIODEK_PORT=9112 python3 tools/metrics_exporter.py
+curl -s localhost:9112/metrics | head
+```
+
+Serie: `miodek_reduction_ratio`, `miodek_routed_ratio`, `miodek_total_words`, `miodek_routed_words`, `miodek_hits_total{rule,klasa}`, `miodek_health` (1 OK, 0 ALARM) plus `miodek_health_na`, `miodek_routed_ratio_alarm_threshold`, `miodek_stage2_runs_total{engine,verdict}`, oraz zdrowie samego eksportera (`miodek_exporter_up`, `miodek_scrape_duration_seconds`). Konfiguracja przez zmienne środowiskowe (`MIODEK_CORPUS`, `MIODEK_PORT`, `MIODEK_LOG`, `MIODEK_PROFILE`, `MIODEK_DICT`).
+
+Uczciwość danych: E1, E2 i E4 są realne od zaraz (z manifestu Stage 1, zero kosztu modelu). Panel przebiegów Stage 2 wypełnia się dopiero, gdy realny silnik osądu nazbiera przebiegów; dziś osąd chodzi na atrapie, więc ta seria bywa pusta. To realny panel czekający na dane (żadna zaślepka).
+
+Artefakty wdrożeniowe (jednostka systemd eksportera, fragment scrape do `prometheus.yml`, provider provisioningu i dashboard Grafany) leżą w `deploy/`. Runbook wdrożenia i pełen schemat metryk: `deploy/README.md` oraz `metrics-exporter.schema.md`.
+
 **Runner Stage 2 (`runner.py`).** Spina linter z osądem modelu. Czyta manifest, wybiera segmenty `review` (tą samą funkcją co współczynnik redukcji), woła wymienialny silnik osądu i stosuje bramkę „PASS z uwagami to NIE PASS". Domyślny silnik to deterministyczna atrapa (bez sieci); realny silnik wpina się przez `engines.JudgeEngine` bez zmian w runnerze.
 
 ```bash

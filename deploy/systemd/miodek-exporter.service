@@ -1,0 +1,39 @@
+# miodek-exporter.service — eksporter metryk Stage 1 (E1/E2/E4) w formacie Prometheus.
+#
+# Goła usługa systemd (zero-dep: Python 3.14 na mbair wystarcza, bez budowania obrazu).
+# Preferowana forma wg opisu zadania. Wariant kontenerowy (quadlet) jest opcją w deploy/README.md.
+#
+# INSTALACJA (na mbair, jako user `mac`, usługa --user):
+#   mkdir -p ~/.config/systemd/user
+#   cp deploy/systemd/miodek-exporter.service ~/.config/systemd/user/
+#   # uzupełnij ścieżki repo/korpusu (placeholdery /opt/sztuczny-miodek poniżej):
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now miodek-exporter.service
+#   # podgląd: systemctl --user status miodek-exporter.service ; curl -s localhost:9112/metrics | head
+#   # (loginctl enable-linger mac — żeby usługa --user żyła bez aktywnej sesji)
+
+[Unit]
+Description=Sztuczny Miodek — eksporter metryk Stage 1 (Prometheus, KAN-219)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Ścieżki placeholderowe — operator dostosowuje do miejsca repo na mbair.
+ExecStart=/usr/bin/python3 /opt/sztuczny-miodek/tools/metrics_exporter.py
+WorkingDirectory=/opt/sztuczny-miodek
+Environment=MIODEK_PORT=9112
+# Korpus prozy do lintowania (operator ustawia realną ścieżkę). Brak => katalog repo.
+Environment=MIODEK_CORPUS=/opt/sztuczny-miodek
+# Wspólny strumień decyzji (przebiegi Stage 2). Domyślnie decisions.jsonl w repo.
+Environment=MIODEK_LOG=/opt/sztuczny-miodek/decisions.jsonl
+# TTL cache state — żeby częste scrape'y nie mieliły lintera.
+Environment=MIODEK_SCRAPE_CACHE_TTL=30
+Restart=on-failure
+RestartSec=5
+# Hartowanie (na tyle, na ile pozwala czytanie korpusu):
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=default.target

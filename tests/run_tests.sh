@@ -177,6 +177,13 @@ else
   echo "FAIL LanguageTool G4 — parsowanie matches na Suggestion, POST form-encoded text+language, Content-Type/User-Agent albo odporność na pusty/uszkodzony JSON rozjechały się (patrz wyżej)"; fail=1
 fi
 
+echo "== Eksporter metryk Prometheus: render serii + artefakty deploy (KAN-219) =="
+if python3 "$DIR/../tools/check_metrics_exporter.py"; then
+  : # OK — komunikat wypisuje sam skrypt
+else
+  echo "FAIL eksporter metryk — render_metrics zgubił HELP/TYPE, złamał format (etykiety/escaping/inwariant red+routed), pomylił mapowanie zdrowia OK/ALARM/N/A, źle agregował Stage 2, fail-soft przeciekł albo artefakty deploy (service/scrape/provider/dashboard) zgubiły krytyczne pola (patrz wyżej)"; fail=1
+fi
+
 if [[ $fail -eq 0 ]]; then
   echo "WSZYSTKIE TESTY PRZESZŁY."
 else

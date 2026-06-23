@@ -1,0 +1,183 @@
+{
+  "uid": "miodek-obs",
+  "title": "Sztuczny Miodek — obserwowalność",
+  "tags": ["miodek", "obserwowalnosc", "stage1"],
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "graphTooltip": 0,
+  "time": { "from": "now-6h", "to": "now" },
+  "refresh": "1m",
+  "templating": {
+    "list": [
+      {
+        "name": "DS_PROMETHEUS",
+        "label": "Prometheus",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": {},
+        "hide": 0
+      }
+    ]
+  },
+  "annotations": { "list": [] },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Współczynnik redukcji",
+      "description": "Udział treści, której model NIE tyka (1 - routed_ratio). Liczone z manifestu Stage 1 (E1).",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0, "max": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 0.8 },
+              { "color": "green", "value": 0.9 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "area" },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "miodek_reduction_ratio" }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Słowa: total / routed",
+      "description": "Wolumen korpusu i ile słów trafia do Stage 2 (akapity z trafieniem review).",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 6, "w": 6, "x": 6, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "none", "graphMode": "none" },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "miodek_total_words", "legendFormat": "total" },
+        { "refId": "B", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "miodek_routed_words", "legendFormat": "routed" }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Zdrowie ekonomii (E4)",
+      "description": "1=OK (linter odsiewa), 0=ALARM (za dużo treści do modelu). Stan N/A widoczny w osobnym panelu — mała próbka nie udaje OK.",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 6, "w": 6, "x": 12, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "value", "options": { "1": { "text": "OK", "color": "green" }, "0": { "text": "ALARM", "color": "red" } } }
+          ],
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "red", "value": null }, { "color": "green", "value": 1 } ] }
+        },
+        "overrides": []
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "none" },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "miodek_health" }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Próbka N/A (E4)",
+      "description": "1 gdy zdrowie = N/A (próbka < min_words, wskaźnik niewiarygodny). Mała próbka NIE udaje OK.",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 6, "w": 6, "x": 18, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "value", "options": { "1": { "text": "N/A próbka za mała", "color": "text" }, "0": { "text": "OK próbka", "color": "green" } } }
+          ]
+        },
+        "overrides": []
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "none" },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "miodek_health_na" }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Routed ratio vs próg alarmu (E4)",
+      "description": "Udział treści routowanej do modelu (hit rate) na tle progu alarmu. Wzrost ponad próg = możliwa regresja reguł lub zmiana korpusu.",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
+      "fieldConfig": {
+        "defaults": { "unit": "percentunit", "min": 0, "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 10 } },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "próg alarmu" },
+            "properties": [ { "id": "custom.lineStyle", "value": { "fill": "dash", "dash": [8, 4] } }, { "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } } ] }
+        ]
+      },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "miodek_routed_ratio", "legendFormat": "routed ratio" },
+        { "refId": "B", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "miodek_routed_ratio_alarm_threshold", "legendFormat": "próg alarmu" }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Atrybucja per reguła (E2) — review",
+      "description": "Które reguły generują najwięcej trafień routowanych do modelu (top 10). Migawka bieżącego korpusu.",
+      "type": "barchart",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "options": { "orientation": "horizontal", "legend": { "displayMode": "list", "placement": "bottom" } },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "topk(10, miodek_hits_total{klasa=\"review\"})",
+          "legendFormat": "{{rule}}", "instant": true }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Stage 2 — przebiegi per silnik / werdykt",
+      "description": "Wypełnia się DOPIERO gdy realny silnik Stage 2 (Bielik przez Ollama / model przez OpenRouter za interfejs engines.JudgeEngine) nazbiera przebiegów. Dziś Stage 2 chodzi na atrapie (StubJudgeEngine), więc panel może być pusty. To NIE zaślepka — realny panel czekający na dane.",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 14 },
+      "fieldConfig": { "defaults": { "unit": "short", "custom": { "drawStyle": "line", "lineWidth": 2 } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull"] }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "sum by (engine, verdict) (miodek_stage2_runs_total)",
+          "legendFormat": "{{engine}} / {{verdict}}" }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "Eksporter: up / czas scrape",
+      "description": "Zdrowie samego eksportera: up=1 gdy ostatni zbiór metryk się udał; czas budowy zestawu (uruchomienie lintera + obliczenia).",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 14 },
+      "fieldConfig": { "defaults": { "custom": { "drawStyle": "line", "lineWidth": 2 } }, "overrides": [
+        { "matcher": { "id": "byName", "options": "czas scrape [s]" }, "properties": [ { "id": "unit", "value": "s" } ] }
+      ] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "miodek_exporter_up", "legendFormat": "up" },
+        { "refId": "B", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "miodek_scrape_duration_seconds", "legendFormat": "czas scrape [s]" }
+      ]
+    }
+  ]
+}
