@@ -37,12 +37,12 @@ import contextlib
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if REPO_ROOT not in sys.path:
-    sys.path.insert(0, REPO_ROOT)
+    sys.path.insert(0, os.path.join(REPO_ROOT, "src"))
 
-import config              # noqa: E402
-import runner              # noqa: E402
-import runpod_lifecycle    # noqa: E402
-from runpod_lifecycle import managed_ephemeral_pod  # noqa: E402
+from miodek import config              # noqa: E402
+from miodek import runner              # noqa: E402
+from miodek import runpod_lifecycle    # noqa: E402
+from miodek.runpod_lifecycle import managed_ephemeral_pod  # noqa: E402
 
 _TEST_KEY_ENV = "MIODEK_TEST_RUNPOD_EPH_KEY"
 
@@ -327,7 +327,7 @@ def main():
     # Dowód, że oba transporty są wołane ZGODNIE ze swoim kontraktem przez REALNY kod (create_pod
     # z launchera + RunPodClient._call) — bez sieci (atrapy zapisują pozycje argumentów). Gdyby
     # transporty się zlały (jeden parametr do obu funkcji), tu pękłoby na pozycji method/url.
-    import runpod_pod_up as _rpu  # noqa: E402
+    from miodek import runpod_pod_up as _rpu  # noqa: E402
 
     pod_up_seen = {}
     def _pod_up_contract(method, url, *, data, headers, timeout):
@@ -392,7 +392,7 @@ def main():
             fails.append("publish_gate --runpod bez klucza: brak komunikatu PUBLIKACJA WSTRZYMANA")
 
     # === 10/11: bramka UX korektora ===
-    import corrector  # noqa: E402
+    from miodek import corrector  # noqa: E402
     with tempfile.TemporaryDirectory() as tmp:
         proza = os.path.join(tmp, "tekst.md")
         with open(proza, "w", encoding="utf-8") as f:

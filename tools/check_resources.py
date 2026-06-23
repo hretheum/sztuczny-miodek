@@ -24,11 +24,11 @@ import sys
 import tempfile
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, REPO_ROOT)
+sys.path.insert(0, os.path.join(REPO_ROOT, "src"))
 
-import resources  # noqa: E402
-import ai_linter  # noqa: E402
-import config  # noqa: E402
+from miodek import resources  # noqa: E402
+from miodek import ai_linter  # noqa: E402
+from miodek import config  # noqa: E402
 
 
 def main():

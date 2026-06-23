@@ -32,12 +32,12 @@ import re
 import sys
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-RULES_PATH = os.path.join(REPO_ROOT, "rules.json")
+RULES_PATH = os.path.join(REPO_ROOT, "src", "miodek", "data", "rules.json")
 DOC_PATH = os.path.join(REPO_ROOT, "manieryzm-ai.md")
 
 # Import lintera (REPO_ROOT na ścieżce) — źródło compile_markers i PROCEDURAL_MARKER_IDS.
-sys.path.insert(0, REPO_ROOT)
-import ai_linter  # noqa: E402
+sys.path.insert(0, os.path.join(REPO_ROOT, "src"))
+from miodek import ai_linter  # noqa: E402
 
 # Wzorzec ID markera — TYLKO realne prefiksy taksonomii: PL- / EN-.
 # Celowo zawężony (nie [A-Z]{2,}-[A-Z]+), by parsowanie dokumentu nie złapało przypadkiem

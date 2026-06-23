@@ -62,12 +62,7 @@ import os
 import re
 import sys
 
-# Import lintera/adaptera bez wymuszania ścieżki w środowisku wywołującego.
-_THIS_DIR = os.path.dirname(os.path.abspath(__file__))
-if _THIS_DIR not in sys.path:
-    sys.path.insert(0, _THIS_DIR)
-
-import ai_linter  # noqa: E402  (_select_adapter — ta sama segmentacja co linter)
+from miodek import ai_linter  # (_select_adapter — ta sama segmentacja co linter)
 
 _WORD_RE = re.compile(r"\w+")
 
@@ -421,7 +416,7 @@ def economy_health(manifest, economy=None, file_reader=_default_file_reader):
     """
     if economy is None:
         # Lokalny import, żeby nie wymuszać configu przy samym imporcie metrics.
-        import config as _config  # noqa: E402
+        from miodek import config as _config
         economy = _config.load_economy()
 
     alarm = float(economy.get("routed_ratio_alarm", 0.10))

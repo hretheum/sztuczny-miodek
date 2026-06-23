@@ -16,10 +16,10 @@ import os
 import sys
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, REPO_ROOT)
-import config  # noqa: E402
+sys.path.insert(0, os.path.join(REPO_ROOT, "src"))
+from miodek import config  # noqa: E402
 
-CONFIG_PATH = os.path.join(REPO_ROOT, "config.json")
+CONFIG_PATH = os.path.join(REPO_ROOT, "src", "miodek", "data", "config.json")
 
 
 def main():

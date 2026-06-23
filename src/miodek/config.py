@@ -20,15 +20,10 @@ import json
 import os
 import sys
 
-# Katalog modułu na ścieżce importu, by `import resources` działał także przy uruchomieniu
-# config.py samodzielnie z dowolnego cwd (samowystarczalność jak w ai_linter).
-# DO USUNIĘCIA w KAN-227: po przejściu na pakiet instalowalny import będzie bezwzględny
-# (`from miodek import resources`), więc ten sys.path.insert przestanie być potrzebny.
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import resources  # noqa: E402 — jeden punkt dostępu do danych pakietu (KAN-226)
+from miodek import resources  # jeden punkt dostępu do danych pakietu (KAN-226/227)
 
-# Ścieżka do configu przez centralny `resources` (KAN-226). W KAN-227 ten punkt przełączy się
-# na importlib.resources bez dotykania logiki profili/progów.
+# Ścieżka do configu przez centralny `resources` — importlib.resources na miodek/data (KAN-227),
+# niezależna od cwd i poprawna po instalacji jako paczka.
 CONFIG_PATH = resources.packaged_data_path("config.json")
 
 # Domyślne progi = stan historyczny (sprzed D1). Używane gdy config.json nie istnieje LUB jako

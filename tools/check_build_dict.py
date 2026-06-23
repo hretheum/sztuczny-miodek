@@ -17,9 +17,9 @@ import sys
 import tempfile
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, REPO_ROOT)
+sys.path.insert(0, os.path.join(REPO_ROOT, "src"))
 import build_dict   # noqa: E402
-import dictionary   # noqa: E402
+from miodek import dictionary   # noqa: E402
 
 
 def main():

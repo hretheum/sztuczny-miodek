@@ -21,11 +21,11 @@ import sys
 
 # Import z katalogu nadrzędnego (repo root)
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, REPO_ROOT)
+sys.path.insert(0, os.path.join(REPO_ROOT, "src"))
 
-import ai_linter  # noqa: E402
+from miodek import ai_linter  # noqa: E402
 
-RULES_PATH = os.path.join(REPO_ROOT, "rules.json")
+RULES_PATH = os.path.join(REPO_ROOT, "src", "miodek", "data", "rules.json")
 
 # Pola opcjonalne przewidziane na przyszłość (A5 + rozbudowa katalogu).
 # Generator NIE wypełnia ich teraz — schema je dopuszcza, linter (A2) traktuje jako opcjonalne.

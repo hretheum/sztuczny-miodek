@@ -35,10 +35,6 @@ import os
 import signal
 import sys
 
-_THIS_DIR = os.path.dirname(os.path.abspath(__file__))
-if _THIS_DIR not in sys.path:
-    sys.path.insert(0, _THIS_DIR)
-
 # Baza REST RunPod (REST API v1). Auth: nagłówek Authorization: Bearer <RUNPOD_API_KEY>.
 DEFAULT_BASE_URL = "https://rest.runpod.io/v1"
 DEFAULT_API_KEY_ENV = "RUNPOD_API_KEY"
@@ -378,12 +374,8 @@ class managed_ephemeral_pod(_SignalTeardownMixin):
         self.no_model = no_model
         self.name = name
         # Lazy-import launchera, by uniknąć cyklu importów na poziomie modułu (i pozwolić wstrzyknąć).
-        # Launcher żyje w tools/ — dokładamy ten katalog do path tylko przy realnym imporcie.
         if pod_up is None:
-            _tools_dir = os.path.join(_THIS_DIR, "tools")
-            if _tools_dir not in sys.path:
-                sys.path.insert(0, _tools_dir)
-            import runpod_pod_up as pod_up  # noqa: E402
+            from miodek import runpod_pod_up as pod_up
         self._pod_up = pod_up
         self.gpus = gpus if gpus is not None else list(pod_up.DEFAULT_GPUS)
         # DWA niezgodne kontrakty transportu (patrz docstring) — trzymane ROZDZIELNIE:

@@ -17,8 +17,8 @@ import sys
 import tempfile
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, REPO_ROOT)
-import decision_log as DL  # noqa: E402
+sys.path.insert(0, os.path.join(REPO_ROOT, "src"))
+from miodek import decision_log as DL  # noqa: E402
 
 
 def main():

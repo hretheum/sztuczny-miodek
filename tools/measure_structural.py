@@ -15,8 +15,8 @@ import os
 import sys
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, REPO_ROOT)
-import adapter  # noqa: E402
+sys.path.insert(0, os.path.join(REPO_ROOT, "src"))
+from miodek import adapter  # noqa: E402
 
 
 def _prose_paras(doc):
@@ -38,7 +38,7 @@ def c_block_boundaries():
 
 def c_emdash_not_merged():
     # 4 akapity po 1 myślniku → BRAK em-dash overuse (gdyby zlane: 4 w 1 akapicie = overuse)
-    import ai_linter
+    from miodek import ai_linter
     html = "<p>Cel — jasny.</p><p>Zakres — szeroki.</p><p>Budżet — ok.</p><p>Termin — bliski.</p>"
     doc = adapter.StructuralAdapter().normalize(html)
     return len(ai_linter.detect_emdash_overuse(doc.text, "pl")) == 0
@@ -99,7 +99,7 @@ def c_br_soft_break():
 
 def c_routing_by_extension():
     # routing wg rozszerzenia: .html → Structural, .md → Markdown, .txt → PlainText
-    import ai_linter
+    from miodek import ai_linter
     return (
         type(ai_linter._select_adapter("x.html")).__name__ == "StructuralAdapter"
         and type(ai_linter._select_adapter("x.htm")).__name__ == "StructuralAdapter"

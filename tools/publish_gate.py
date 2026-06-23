@@ -53,16 +53,16 @@ import sys
 _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 _REPO_ROOT = os.path.dirname(_THIS_DIR)
 # Importy z korzenia repo (runner, config) i z tego katalogu (ci_gate).
-for _p in (_REPO_ROOT, _THIS_DIR):
+for _p in (os.path.join(_REPO_ROOT, "src"), _THIS_DIR):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
 import ci_gate  # noqa: E402  (filter_prose, run_linter, LINTER — Stage 1 = ta sama polityka co F2)
-import runner  # noqa: E402  (build_engine_from_config, run_stage2_managed — Stage 2)
-import config  # noqa: E402  (CONFIG_PATH — domyślna ścieżka configu sekcji stage2)
+from miodek import runner  # noqa: E402  (build_engine_from_config, run_stage2_managed — Stage 2)
+from miodek import config  # noqa: E402  (CONFIG_PATH — domyślna ścieżka configu sekcji stage2)
 
 REPO_ROOT = _REPO_ROOT
-LINTER = ci_gate.LINTER
+LINTER_MODULE = ci_gate.LINTER_MODULE  # linter jako moduł pakietu (KAN-227)
 
 
 def build_manifest(files, lang, profile, dict_path):
@@ -71,13 +71,13 @@ def build_manifest(files, lang, profile, dict_path):
     Linter na plikach z trafieniami review zwraca exit 1 — to SPODZIEWANE (nie błąd: nas interesuje
     JSON manifestu, nie kod). Exit 2 = błąd reguł/konfiguracji => podnosimy RuntimeError (F3 kończy
     exit 2). Zwraca dict {"hits":[...], "summary":[...]} — kontrakt runnera."""
-    cmd = [sys.executable, LINTER, "--lang", lang, "--format", "json"]
+    cmd = [sys.executable, "-m", LINTER_MODULE, "--lang", lang, "--format", "json"]
     if profile:
         cmd += ["--profile", profile]
     if dict_path:
         cmd += ["--dict", dict_path]
     cmd += files
-    proc = subprocess.run(cmd, capture_output=True, text=True)
+    proc = subprocess.run(cmd, capture_output=True, text=True, env=ci_gate._linter_env())
     if proc.returncode == 2:
         raise RuntimeError(
             "linter --format json zwrócił exit 2 (błąd reguł/konfiguracji): "

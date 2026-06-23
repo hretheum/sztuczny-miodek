@@ -16,8 +16,8 @@ import sys
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 EVAL_PATH = os.path.join(REPO_ROOT, "tests", "sentence_eval.md")
 
-sys.path.insert(0, REPO_ROOT)
-import adapter  # noqa: E402
+sys.path.insert(0, os.path.join(REPO_ROOT, "src"))
+from miodek import adapter  # noqa: E402
 
 
 def load_cases():

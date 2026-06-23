@@ -14,7 +14,8 @@ To SUROWIEC zasilający:
 
 Format JSONL (ZERO-DEP, stdlib json), spójny z D1/D2 (JSON). Append-only: nigdy nie nadpisuje,
 tylko dokleja — historia decyzji jest niezmienna (audyt). Miejsce: domyślnie `decisions.jsonl`
-w katalogu repo (konfigurowalne ścieżką).
+w katalogu roboczym użytkownika (konfigurowalne ścieżką). To plik WYJŚCIOWY, nie dane pakietu —
+nie zapisujemy go obok kodu, bo katalog pakietu bywa tylko do odczytu po instalacji (KAN-227).
 
 Schemat wpisu:
   {
@@ -36,7 +37,9 @@ import json
 import os
 import sys
 
-DEFAULT_LOG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "decisions.jsonl")
+# Plik WYJŚCIOWY: domyślnie w katalogu roboczym użytkownika (ścieżka względna → cwd przy zapisie).
+# Katalog pakietu bywa read-only po instalacji (wheel/uvx), więc NIE zapisujemy obok kodu (KAN-227).
+DEFAULT_LOG_PATH = "decisions.jsonl"
 
 VERDICTS = ("accept", "reject")
 # Pola obowiązkowe każdego wpisu (minimum, by wpis był użyteczny dla D3/B3).

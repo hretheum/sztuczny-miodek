@@ -5,13 +5,16 @@
 # Użycie: bash tests/run_tests.sh   (z katalogu skilla lub dowolnego)
 set -u
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-LINT="$DIR/../ai_linter.py"
+# Pakiet miodek żyje w src/ (KAN-227). Na PYTHONPATH, by `-m miodek.ai_linter` i `from miodek import`
+# w tools/check_* działały bez instalacji. Linter to moduł — nie odpalamy go jako luźny plik.
+export PYTHONPATH="$DIR/../src${PYTHONPATH:+:$PYTHONPATH}"
+LINT=(python3 -m miodek.ai_linter)
 fail=0
 
 assert_verdict() {
   local file="$1" want="$2" lang="$3"
   local out verdict
-  out="$(python3 "$LINT" --lang "$lang" "$DIR/$file" 2>/dev/null)"
+  out="$("${LINT[@]}" --lang "$lang" "$DIR/$file" 2>/dev/null)"
   verdict="$(printf '%s\n' "$out" | awk -F'|' '/PASS|FAIL/ {gsub(/ /,"",$NF); print $NF}' | tail -1)"
   if [[ "$verdict" == "$want"* ]]; then
     echo "OK   $file → $verdict (oczekiwano $want)"
@@ -114,7 +117,7 @@ fi
 
 echo "== Zdrowie ekonomii (E4): smoke CLI end-to-end (linter -> manifest -> health, czysty=OK) =="
 # Czysty plik kontrolny: routed=0% => STATUS OK => exit 0. Wymusza spójność lintera, metrics i CLI.
-if python3 "$DIR/../ai_linter.py" --format json "$DIR/control_pl_clean.md" 2>/dev/null \
+if "${LINT[@]}" --format json "$DIR/control_pl_clean.md" 2>/dev/null \
      | python3 "$DIR/../tools/measure_health.py" --min-words 1 >/dev/null; then
   echo "OK   zdrowie ekonomii — czysty plik daje STATUS OK (exit 0); ALARM dałby exit 1 (gate-owalne)."
 else

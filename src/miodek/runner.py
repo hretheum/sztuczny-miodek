@@ -43,15 +43,11 @@ import json
 import os
 import sys
 
-_THIS_DIR = os.path.dirname(os.path.abspath(__file__))
-if _THIS_DIR not in sys.path:
-    sys.path.insert(0, _THIS_DIR)
-
-import metrics  # noqa: E402  (review_paragraphs_for_file — jedno źródło prawdy selekcji)
-import decision_log  # noqa: E402  (E3: wspólny strumień JSONL z D4 — append_decision/read_decisions)
-import config  # noqa: E402  (KAN-218: load_stage2 — wybór silnika Stage 2 z configu)
-import runpod_lifecycle  # noqa: E402  (KAN-220: auto-offload poda RunPod po przebiegu Stage 2)
-from engines import (  # noqa: E402
+from miodek import metrics          # (review_paragraphs_for_file — jedno źródło prawdy selekcji)
+from miodek import decision_log     # (E3: wspólny strumień JSONL z D4 — append/read_decisions)
+from miodek import config           # (KAN-218: load_stage2 — wybór silnika Stage 2 z configu)
+from miodek import runpod_lifecycle  # (KAN-220: auto-offload poda RunPod po przebiegu Stage 2)
+from miodek.engines import (
     JudgeEngine, ReviewSegment, StubJudgeEngine, OpenAICompatEngine, OllamaEngine,
     RoutingJudgeEngine,
 )

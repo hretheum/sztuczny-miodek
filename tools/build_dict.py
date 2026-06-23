@@ -26,8 +26,8 @@ import sys
 from collections import Counter
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, REPO_ROOT)
-import ai_linter  # noqa: E402 — compile_markers do veta kanonu
+sys.path.insert(0, os.path.join(REPO_ROOT, "src"))
+from miodek import ai_linter  # noqa: E402 — compile_markers do veta kanonu
 
 # Token: ciąg liter (z polskimi), min 3 znaki. Liczby/interpunkcja pomijane.
 _TOKEN_RE = re.compile(r"[a-ząćęłńóśźżA-ZĄĆĘŁŃÓŚŹŻ]{3,}")

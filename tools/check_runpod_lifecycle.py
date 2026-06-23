@@ -35,11 +35,11 @@ import contextlib
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if REPO_ROOT not in sys.path:
-    sys.path.insert(0, REPO_ROOT)
+    sys.path.insert(0, os.path.join(REPO_ROOT, "src"))
 
-import config              # noqa: E402
-import runpod_lifecycle    # noqa: E402
-from runpod_lifecycle import RunPodClient, managed_pod  # noqa: E402
+from miodek import config              # noqa: E402
+from miodek import runpod_lifecycle    # noqa: E402
+from miodek.runpod_lifecycle import RunPodClient, managed_pod  # noqa: E402
 
 
 def _recording_transport(calls, status=200, body="{}"):
@@ -301,8 +301,8 @@ def main():
 
     # === 9: ścieżka NO-OP w _main (manage=false → żaden REST nie wołany) ===
     # Symulujemy decyzję _main: lifecycle.manage AND remote engine.
-    import runner  # noqa: E402
-    from engines import StubJudgeEngine, OllamaEngine  # noqa: E402
+    from miodek import runner  # noqa: E402
+    from miodek.engines import StubJudgeEngine, OllamaEngine  # noqa: E402
 
     # stub (lokalny) nigdy nie jest remote
     if runner._is_remote_engine(StubJudgeEngine()):

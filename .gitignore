@@ -30,3 +30,4 @@ decisions.jsonl
 # Prywatna warstwa terminologii domenowej (NIE commitować)
 RADA_JEZYKOWA.md
 Chase Hughes Framework/
+dist/

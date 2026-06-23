@@ -1,0 +1,36 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "sztuczny-miodek"
+version = "1.0.0"
+description = "Audyt polszczyzny i eradykacja manieryzmu AI (AI-tells) w tekstach PL/EN — deterministyczny linter plus opcjonalny osąd modelu."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "Tomasz Jakubowski" }]
+keywords = ["polish", "linter", "ai-detection", "language-quality", "ai-tells", "miodek"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Natural Language :: Polish",
+    "Topic :: Text Processing :: Linguistic",
+]
+# Rdzeń zero-dep (tylko biblioteka standardowa). Cięższe elementy jako extras dołoży KAN-229.
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/researchanddeploy/sztuczny-miodek"
+
+[project.scripts]
+# Prowizoryczny punkt wejścia: dziś `miodek` = linter (Stage 1). KAN-228 zastąpi go dispatcherem
+# z podkomendami (miodek lint / correct / gate / lt) bez zmiany nazwy polecenia.
+miodek = "miodek.ai_linter:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/miodek"]
+
+[tool.hatch.build.targets.sdist]
+# Do sdist bierzemy pakiet plus to, co potrzebne do testów/dokumentacji z klonu.
+include = ["src/miodek", "tools", "tests", "hooks", "README.md", "LICENSE", "manieryzm-ai.md"]

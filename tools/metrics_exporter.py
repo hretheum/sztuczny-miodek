@@ -57,14 +57,23 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if REPO_ROOT not in sys.path:
-    sys.path.insert(0, REPO_ROOT)
+    sys.path.insert(0, os.path.join(REPO_ROOT, "src"))
 
-import metrics  # noqa: E402
-import config as _config  # noqa: E402
-import decision_log  # noqa: E402
-import runner  # noqa: E402
+from miodek import metrics  # noqa: E402
+from miodek import config as _config  # noqa: E402
+from miodek import decision_log  # noqa: E402
+from miodek import runner  # noqa: E402
 
-AI_LINTER = os.path.join(REPO_ROOT, "ai_linter.py")
+# Linter jako moduł pakietu (KAN-227); subprocess dostaje PYTHONPATH ze src.
+AI_LINTER_MODULE = "miodek.ai_linter"
+_SRC_DIR = os.path.join(REPO_ROOT, "src")
+
+
+def _linter_env():
+    env = dict(os.environ)
+    prev = env.get("PYTHONPATH", "")
+    env["PYTHONPATH"] = _SRC_DIR + (os.pathsep + prev if prev else "")
+    return env
 
 # Format text exposition Prometheus (wersja kontraktu). Wystawiamy w nagłówku Content-Type.
 CONTENT_TYPE = "text/plain; version=0.0.4; charset=utf-8"
@@ -238,14 +247,14 @@ def build_manifest(corpus, profile=None, dict_path=None, lang="both"):
     manieryzmem, NIE błąd eksportera. Manifest JSON jest na stdout niezależnie od kodu wyjścia,
     więc parsujemy stdout i ignorujemy kod 0/1. Dopiero brak stdout / niepoprawny JSON / wyjątek
     podprocesu to realny błąd (sygnał do fail-soft w warstwie wyżej)."""
-    cmd = [sys.executable, AI_LINTER, "--format", "json", "--lang", lang]
+    cmd = [sys.executable, "-m", AI_LINTER_MODULE, "--format", "json", "--lang", lang]
     if profile:
         cmd += ["--profile", profile]
     if dict_path:
         cmd += ["--dict", dict_path]
     cmd += _corpus_paths(corpus)
 
-    proc = subprocess.run(cmd, capture_output=True, text=True)
+    proc = subprocess.run(cmd, capture_output=True, text=True, env=_linter_env())
     stdout = proc.stdout or ""
     if not stdout.strip():
         raise RuntimeError(

@@ -24,14 +24,12 @@ import glob
 from dataclasses import dataclass
 from typing import Callable, List, Tuple
 
-# Katalog skryptu na ścieżce importu (linter wołany ścieżką bezwzględną z dowolnego cwd),
-# by `import adapter`/`import resources` działał niezależnie od bieżącego katalogu.
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-
-import resources  # noqa: E402 — jeden punkt dostępu do danych pakietu (KAN-226)
-import adapter     # noqa: E402 — domyślny adapter wejścia/wyjścia (C1, wierny podział akapitów)
-import config      # noqa: E402 — progi/profile jako konfiguracja (D1)
-import dictionary  # noqa: E402 — słownik domenowy: warstwa nadrzędna terminów (D2)
+# Importy wewnątrzpakietowe (KAN-227: pakiet miodek). Uruchamiane jako `python3 -m miodek.ai_linter`
+# lub przez entry point — nie jako luźny skrypt.
+from miodek import resources   # jeden punkt dostępu do danych pakietu (KAN-226)
+from miodek import adapter     # domyślny adapter wejścia/wyjścia (C1, wierny podział akapitów)
+from miodek import config      # progi/profile jako konfiguracja (D1)
+from miodek import dictionary  # słownik domenowy: warstwa nadrzędna terminów (D2)
 
 # Progi proceduralne ładowane z config.json (profil aktywny; brak pliku → wartości historyczne).
 # Zero zmiany zachowania dla profilu „default". Nadpisywalne przez --profile w main().

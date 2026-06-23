@@ -35,7 +35,19 @@ import subprocess
 import sys
 
 HOOK_DIR = os.path.dirname(os.path.abspath(__file__))
-LINTER = os.path.join(HOOK_DIR, "..", "ai_linter.py")
+# Linter jako MODUŁ pakietu (KAN-227): ai_linter ma importy pakietowe, więc nie odpalamy go jako
+# luźny plik. Subprocess dostaje PYTHONPATH wskazujący src, by znalazł pakiet miodek.
+LINTER_MODULE = "miodek.ai_linter"
+_SRC_DIR = os.path.join(os.path.dirname(HOOK_DIR), "src")
+
+
+def _linter_env():
+    env = dict(os.environ)
+    prev = env.get("PYTHONPATH", "")
+    env["PYTHONPATH"] = _SRC_DIR + (os.pathsep + prev if prev else "")
+    return env
+
+
 PROSE_EXTS = (".md", ".txt")
 
 
@@ -116,10 +128,11 @@ def run_linter(paths):
         return None
     try:
         proc = subprocess.run(
-            [sys.executable, LINTER, "--format", "json", *paths],
+            [sys.executable, "-m", LINTER_MODULE, "--format", "json", *paths],
             capture_output=True,
             text=True,
             timeout=60,
+            env=_linter_env(),
         )
     except Exception:
         return None  # fail-open

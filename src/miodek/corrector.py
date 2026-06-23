@@ -45,16 +45,12 @@ import tempfile
 from dataclasses import dataclass, field
 from typing import Callable, List, Optional, Tuple
 
-_THIS_DIR = os.path.dirname(os.path.abspath(__file__))
-if _THIS_DIR not in sys.path:
-    sys.path.insert(0, _THIS_DIR)
-
-import adapter            # noqa: E402  (Edit, NormalizedDoc, write_back, apply_edits_to_text)
-import ai_linter          # noqa: E402  (_select_adapter, scan_file, compile_markers, progi/słownik)
-import config             # noqa: E402  (CONFIG_PATH — sekcja stage2 / lifecycle)
-import engines            # noqa: E402  (StubRewriteEngine — atrapa korektora)
-import runner             # noqa: E402  (run_stage2, run_stage2_managed, build_engine_from_config,
-                          #              select_review_segments)
+from miodek import adapter    # (Edit, NormalizedDoc, write_back, apply_edits_to_text)
+from miodek import ai_linter  # (_select_adapter, scan_file, compile_markers, progi/słownik)
+from miodek import config     # (CONFIG_PATH — sekcja stage2 / lifecycle)
+from miodek import engines    # (StubRewriteEngine — atrapa korektora)
+from miodek import runner     # (run_stage2, run_stage2_managed, build_engine_from_config,
+                              #  select_review_segments)
 
 # Domyślny limit iteracji pętli korektora. Konfigurowalny: argument correct_document(max_iter=...)
 # oraz CLI --max-iter; CLI bez flagi bierze stage2.max_iter z config.json (fallback ta stała).
@@ -99,7 +95,7 @@ def make_default_audit(lang="both", profile=None, dict_path=None) -> AuditFn:
         if profile is not None:
             ai_linter.THRESHOLDS = config.load_thresholds(profile)
         if dict_path is not None:
-            import dictionary
+            from miodek import dictionary
             ai_linter.DICTIONARY = dictionary.load_dictionary(dict_path)
 
         compiled = ai_linter.compile_markers(lang)

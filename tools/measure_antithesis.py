@@ -19,7 +19,7 @@ import re
 import sys
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-RULES_PATH = os.path.join(REPO_ROOT, "rules.json")
+RULES_PATH = os.path.join(REPO_ROOT, "src", "miodek", "data", "rules.json")
 EVAL_PATH = os.path.join(REPO_ROOT, "tests", "antithesis_eval.md")
 
 FLAGS = re.IGNORECASE | re.UNICODE

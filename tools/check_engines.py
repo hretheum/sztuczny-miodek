@@ -27,11 +27,11 @@ import tempfile
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if REPO_ROOT not in sys.path:
-    sys.path.insert(0, REPO_ROOT)
+    sys.path.insert(0, os.path.join(REPO_ROOT, "src"))
 
-import config       # noqa: E402
-import runner       # noqa: E402
-from engines import (  # noqa: E402
+from miodek import config       # noqa: E402
+from miodek import runner       # noqa: E402
+from miodek.engines import (  # noqa: E402
     OpenAICompatEngine, OllamaEngine, StubJudgeEngine, ReviewSegment,
     parse_model_reply, build_judge_prompt, USER_AGENT,
     clean_rewrite_reply, REWRITE_SYSTEM_PROMPT, Judgement,

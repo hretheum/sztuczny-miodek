@@ -46,7 +46,19 @@ import subprocess
 import sys
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-LINTER = os.path.join(REPO_ROOT, "ai_linter.py")
+
+# Linter uruchamiany jako MODUŁ pakietu (KAN-227): ai_linter ma importy pakietowe, więc nie da się
+# go odpalić jako luźny plik. Subprocess dostaje PYTHONPATH wskazujący src, by znalazł pakiet miodek.
+LINTER_MODULE = "miodek.ai_linter"
+_SRC_DIR = os.path.join(REPO_ROOT, "src")
+
+
+def _linter_env():
+    """Środowisko dla subprocess lintera: PYTHONPATH ze src na czele (pakiet miodek znajdowalny)."""
+    env = dict(os.environ)
+    prev = env.get("PYTHONPATH", "")
+    env["PYTHONPATH"] = _SRC_DIR + (os.pathsep + prev if prev else "")
+    return env
 
 # Rozszerzenia prozy, które bramka lintuje. Linter sam skanuje szerzej (.html itp.),
 # ale na merge request pilnujemy prozy: .md/.txt.
@@ -117,14 +129,14 @@ def changed_prose_files(base, head):
 
 
 def run_linter(files, lang, profile, dict_path):
-    """Woła ai_linter.py jako podproces na podanych plikach. Propaguje jego exit code."""
-    cmd = [sys.executable, LINTER, "--lang", lang]
+    """Woła linter jako podproces (moduł miodek.ai_linter) na podanych plikach. Propaguje exit code."""
+    cmd = [sys.executable, "-m", LINTER_MODULE, "--lang", lang]
     if profile:
         cmd += ["--profile", profile]
     if dict_path:
         cmd += ["--dict", dict_path]
     cmd += files
-    proc = subprocess.run(cmd, capture_output=True, text=True)
+    proc = subprocess.run(cmd, capture_output=True, text=True, env=_linter_env())
     # Manifest lintera na stdout — do logu CI.
     if proc.stdout:
         sys.stdout.write(proc.stdout)
