@@ -91,6 +91,8 @@ brak `summary`. Bramka write-time nigdy nie zatrzyma pracy z powodu własnej ust
 
 Tylko proza: `.md` i `.txt`. Inne rozszerzenia (w tym `.html`/`.htm`, które linter też
 umie przez adapter strukturalny) bramka write-time pomija — celuje w prozę pisaną.
+Pełny audyt `.html` (oraz klasy block w plikach nie-prozy) zostaje przy bramkach CI (F2)
+i przed publikacją (F3); to świadomy, węższy zakres write-time.
 
 ## Zero zależności
 

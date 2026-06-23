@@ -89,9 +89,11 @@ def main():
     if not block:
         fails.append("(e) zestaw z jednym plikiem z blokerem powinien blokować, a nie blokuje.")
 
-    # (f) smoke end-to-end przez tryb CLI hooka: baseline = exit 1, control = exit 0.
+    # (f) smoke end-to-end przez tryb CLI hooka: baseline = exit 1, control = exit 0,
+    #     triad_eval = exit 0 (sama gęstość FAIL bez blokerów, realny przebieg lintera).
     baseline = os.path.join(TESTS_DIR, "baseline_pl_raport.md")
     control = os.path.join(TESTS_DIR, "control_pl_clean.md")
+    density_only = os.path.join(TESTS_DIR, "triad_eval.md")
     rc_bad = subprocess.run(
         [sys.executable, GATE_SCRIPT, baseline], capture_output=True, text=True
     ).returncode
@@ -102,6 +104,16 @@ def main():
     ).returncode
     if rc_ok != 0:
         fails.append(f"(f) CLI na control_pl_clean.md powinno exit 0 (czysty), było {rc_ok}.")
+    # (f3) realny przebieg lintera na triad_eval.md daje FAIL z density wysoką
+    #      i blockers==0 — bramka MUSI przepuścić (serce F1, pętla end-to-end).
+    rc_density = subprocess.run(
+        [sys.executable, GATE_SCRIPT, density_only], capture_output=True, text=True
+    ).returncode
+    if rc_density != 0:
+        fails.append(
+            f"(f) CLI na triad_eval.md (FAIL, density wysoka, blockers==0) powinno exit 0 "
+            f"— sama gęstość NIE blokuje write-time end-to-end; było {rc_density}."
+        )
 
     # (g) smoke hook-mode: payload na stdin + MIODEK_WRITE_GATE=1 → decision block dla baseline.
     env = dict(os.environ, MIODEK_WRITE_GATE="1")
