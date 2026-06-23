@@ -33,7 +33,7 @@ import config       # noqa: E402
 import runner       # noqa: E402
 from engines import (  # noqa: E402
     OpenAICompatEngine, OllamaEngine, StubJudgeEngine, ReviewSegment,
-    parse_model_reply, build_judge_prompt,
+    parse_model_reply, build_judge_prompt, USER_AGENT,
 )
 
 # Segment testowy: akapit z dwoma trafieniami review (ID + match w prompcie).
@@ -149,6 +149,12 @@ def main():
         fails.append("Ollama body: stream powinien być False")
     if SEG.text not in bodyo["messages"][1]["content"]:
         fails.append("Ollama body: prompt nie zawiera segment.text")
+
+    # KAN-221: oba adaptery wysyłają User-Agent (proxy RunPoda zwraca 403 bez niego).
+    if cap.get("headers", {}).get("User-Agent") != USER_AGENT:
+        fails.append(f"OpenAI nagłówek User-Agent: brak/niezgodny, jest {cap.get('headers', {}).get('User-Agent')!r}")
+    if capo.get("headers", {}).get("User-Agent") != USER_AGENT:
+        fails.append(f"Ollama nagłówek User-Agent: brak/niezgodny, jest {capo.get('headers', {}).get('User-Agent')!r}")
 
     # Ollama JSON rewrite
     engor = OllamaEngine(

@@ -149,6 +149,11 @@ JUDGE_SYSTEM_PROMPT = (
 # Notatka fallback: odpowiedź modelu niejednoznaczna => eskalacja do rewrite (zachowawczo).
 _FALLBACK_NOTES = "niejednoznaczna odpowiedź modelu; eskalacja do rewrite (fail-safe)"
 
+# KAN-221: domyślny User-Agent. Proxy RunPoda (proxy.runpod.net) zwraca 403 Forbidden dla
+# domyślnego UA urllib (Python-urllib), a przepuszcza klienta z jawnym UA. Oba adaptery wysyłają
+# ten nagłówek domyślnie, żeby działać ze zdalnym modelem za proxy bez wstrzykiwania transportu.
+USER_AGENT = "sztuczny-miodek/1.0"
+
 
 def _default_http_transport(url, *, data: bytes, headers: dict, timeout: float) -> str:
     """Jedyne miejsce dotykające sieci. Zwraca surowe ciało odpowiedzi (str).
@@ -283,7 +288,7 @@ class OpenAICompatEngine(JudgeEngine):
                 {"role": "user", "content": build_judge_prompt(segment)},
             ],
         }
-        headers = {"Content-Type": "application/json", **self._extra_headers}
+        headers = {"Content-Type": "application/json", "User-Agent": USER_AGENT, **self._extra_headers}
         if self._api_key:
             headers["Authorization"] = f"Bearer {self._api_key}"
         raw = self._transport(
@@ -322,7 +327,8 @@ class OllamaEngine(JudgeEngine):
         }
         raw = self._transport(
             url, data=json.dumps(body).encode("utf-8"),
-            headers={"Content-Type": "application/json"}, timeout=self._timeout
+            headers={"Content-Type": "application/json", "User-Agent": USER_AGENT},
+            timeout=self._timeout,
         )
         content = _extract_ollama_content(raw)
         verdict, notes = parse_model_reply(content)
