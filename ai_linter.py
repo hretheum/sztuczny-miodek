@@ -25,8 +25,10 @@ from dataclasses import dataclass
 from typing import Callable, List, Tuple
 
 # Katalog skryptu na ścieżce importu (linter wołany ścieżką bezwzględną z dowolnego cwd),
-# by `import adapter` działał niezależnie od bieżącego katalogu — tak jak RULES_PATH względem __file__.
+# by `import adapter`/`import resources` działał niezależnie od bieżącego katalogu.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+import resources  # noqa: E402 — jeden punkt dostępu do danych pakietu (KAN-226)
 import adapter     # noqa: E402 — domyślny adapter wejścia/wyjścia (C1, wierny podział akapitów)
 import config      # noqa: E402 — progi/profile jako konfiguracja (D1)
 import dictionary  # noqa: E402 — słownik domenowy: warstwa nadrzędna terminów (D2)
@@ -56,9 +58,10 @@ DICTIONARY = None
 # lang: 'pl' | 'en' | 'both'; klasa: 'block' | 'review'.
 # ---------------------------------------------------------------------------
 
-# Ścieżka do pliku reguł — względem lokalizacji ai_linter.py (a NIE bieżącego katalogu),
-# żeby linter działał wywoływany z dowolnego miejsca (tak robią testy: python3 .../ai_linter.py).
-RULES_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "rules.json")
+# Ścieżka do pliku reguł — przez centralny `resources` (KAN-226), liczona względem pakietu,
+# a NIE bieżącego katalogu, żeby linter działał wołany z dowolnego miejsca. W KAN-227 ten
+# jeden punkt przełączy się na importlib.resources bez dotykania reszty lintera.
+RULES_PATH = resources.packaged_data_path("rules.json")
 
 
 def load_marker_defs(path: str = RULES_PATH) -> List[Tuple[str, str, str, str, str]]:

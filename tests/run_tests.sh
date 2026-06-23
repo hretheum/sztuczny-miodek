@@ -28,6 +28,13 @@ assert_verdict baseline_en_doc.md        FAIL both
 echo "== Regresja: kontrola (oczekiwane PASS, 0 false-positives) =="
 assert_verdict control_pl_clean.md       PASS pl
 
+echo "== Dostęp do danych pakietu: centralny resources, podłączenie ai_linter/config (KAN-226) =="
+if python3 "$DIR/../tools/check_resources.py"; then
+  : # OK — komunikat wypisuje sam skrypt
+else
+  echo "FAIL resources — dane pakietu nie idą przez jeden punkt (resources.packaged_data_path), ai_linter/config rozjechały podłączenie albo nieznany plik nie daje błędu (patrz wyżej)"; fail=1
+fi
+
 echo "== Spójność ID: rules.json == linter == manieryzm-ai.md (A4) =="
 if python3 "$DIR/../tools/check_id_consistency.py"; then
   : # OK — komunikat wypisuje sam skrypt
