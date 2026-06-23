@@ -1,0 +1,27 @@
+runner.py
+  s_b76104c517d6dd::t_88659f7307fa72 1-197
+runner.schema.md
+  s_b76104c517d6dd::t_a3e051cbb46638 1-89
+engines.py
+  s_b76104c517d6dd::t_49879808b72287 1-120
+tools/check_runner.py
+  s_b76104c517d6dd::t_e7934d3eb7d5cb 1-133
+tests/run_tests.sh
+  s_b76104c517d6dd::t_9a731b8836bc50 108-114
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.10",
+  "base_commit_sha": "ef87240f9bfdcba3f6c67856f3031a3450550c50",
+  "prompts": {},
+  "sessions": {
+    "s_b76104c517d6dd": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9e3d791c-79b1-4b59-a006-630c18864e71",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Eryk Orłowski <eryk@talentcanvas.tech>"
+    }
+  }
+}
