@@ -1,0 +1,19 @@
+README.md
+  s_b76104c517d6dd::t_f71e0bc6bd3de1 110-147
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.10",
+  "base_commit_sha": "7d282714d55acbd20e789f5a8b1097d4eacce4bf",
+  "prompts": {},
+  "sessions": {
+    "s_b76104c517d6dd": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9e3d791c-79b1-4b59-a006-630c18864e71",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Eryk Orłowski <eryk@talentcanvas.tech>"
+    }
+  }
+}
