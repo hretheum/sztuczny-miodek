@@ -235,7 +235,32 @@ python3 runner.py --manifest manifest.json --engine ollama
 
 `--engine` na CLI nadpisuje wybór z configu; brak sekcji `stage2` znaczy atrapa (zero zmiany). Adaptery, prompt osądu i fail-safe parsowania opisuje `engines.schema.md`. Uwaga: realny smoke (Bielik) wymaga dostępnego endpointu, np. modelu serwowanego na RunPodzie; testy w repo działają w pełni offline na atrapie HTTP, bez wywołań sieci.
 
-Schematy: `metrics.schema.md` (redukcja, atrybucja, zdrowie), `runner.schema.md` (kontrakt orkiestracji), `engines.schema.md` (kontrakt realnych adapterów silnika), `decision-log.schema.md` (wspólny strumień zdarzeń runnera i logu decyzji).
+### Auto-offload poda RunPod po przebiegu Stage 2
+
+Gdy model serwowany jest na podzie RunPod, pod może bić pod prąd GPU także między przebiegami osądu. Skill umie zgasić pod automatycznie po wsadzie Stage 2. Włącza się to podsekcją `lifecycle` w `stage2` (`config.json`); domyślnie `manage: false`, więc nic się nie dzieje (zero zmiany zachowania).
+
+```json
+"stage2": {
+  "engine": "ollama",
+  "ollama": { "host": "https://<pod>.runpod.net", "model": "bielik" },
+  "lifecycle": {
+    "manage": true,
+    "pod_id": "<id-poda>",
+    "on_finish": "stop",
+    "idle_backstop_s": 600,
+    "api_key_env": "RUNPOD_API_KEY"
+  }
+}
+```
+
+```bash
+export RUNPOD_API_KEY=...                          # sekret WYŁĄCZNIE z ENV, nigdy z pliku
+python3 runner.py --manifest manifest.json --engine ollama
+```
+
+Gdy `manage: true` i silnik jest zdalny (`ollama`/`openai`), runner owija przebieg w menedżer kontekstu, który gasi pod ZAWSZE po wsadzie. Odporność na padnięcie procesu zbudowano warstwowo: blok `finally` (gasi też przy wyjątku), handlery SIGINT/SIGTERM (gaszą przed zniknięciem procesu i przywracają poprzedni handler), oraz backstop NA PODZIE (`tools/runpod_idle_watchdog.sh`) gaszący pod po `idle_backstop_s` bezczynności na wypadek `kill -9`. Polityka `on_finish`: `stop` (domyślne, GPU gaśnie, model zostaje na dysku) albo `terminate` (trwała kasacja). Błąd gaszenia leci głośno na stderr, bo to bramka kosztowa. Klucz API czytany wyłącznie z ENV (`RUNPOD_API_KEY`). Szczegóły: `runpod-lifecycle.schema.md`; instalacja watchdoga na podzie: `tools/runpod_idle_watchdog.README.md`.
+
+Schematy: `metrics.schema.md` (redukcja, atrybucja, zdrowie), `runner.schema.md` (kontrakt orkiestracji), `engines.schema.md` (kontrakt realnych adapterów silnika), `runpod-lifecycle.schema.md` (auto-offload poda RunPod), `decision-log.schema.md` (wspólny strumień zdarzeń runnera i logu decyzji).
 
 ## Opcjonalna warstwa terminologii domenowej
 

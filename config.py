@@ -211,6 +211,83 @@ def load_stage2(path: str = CONFIG_PATH) -> dict:
     return st
 
 
+# ============================================================================
+# KAN-220 — auto-offload poda RunPod (podsekcja `stage2.lifecycle`).
+# ============================================================================
+#
+# Podsekcja `lifecycle` żyje WEWNĄTRZ sekcji `stage2` (rodzeństwo `openai`/`ollama`). Steruje
+# automatycznym gaszeniem poda po przebiegu Stage 2 (managed_pod w runpod_lifecycle.py).
+# Czytana OSOBNĄ funkcją load_lifecycle, więc load_thresholds (D1), load_economy (E4) i
+# load_stage2 (KAN-218) zostają NIETKNIĘTE.
+#
+# Fallback (brak sekcji `lifecycle`, brak `stage2` lub brak configu) => {"manage": False}
+# => NO-OP: runner NIE owija przebiegu, zero zmiany zachowania. To kluczowy wymóg bezpieczeństwa
+# (domyślnie nikt nie gasi żadnego poda). Klucz API NIGDY w pliku — config trzyma tylko nazwę
+# zmiennej środowiskowej (`api_key_env`); sekret czyta konstruktor klienta z os.environ.
+
+DEFAULT_LIFECYCLE = {"manage": False}
+
+_LIFECYCLE_ON_FINISH = ("stop", "terminate")
+
+
+def load_lifecycle(path: str = CONFIG_PATH) -> dict:
+    """Zwraca konfigurację auto-offloadu poda (podsekcja `stage2.lifecycle` configu).
+
+    Brak configu, brak sekcji `stage2` albo brak podsekcji `lifecycle` → DEFAULT_LIFECYCLE
+    ({"manage": False}): bezpieczny fallback, NO-OP, zero zmiany zachowania.
+
+    Walidacja (tylko gdy `manage` jest prawdziwe — bo wtedy realnie ruszamy pod):
+      - `pod_id` wymagany (niepusty string),
+      - `on_finish` ∈ {stop, terminate} (domyślnie stop),
+      - `idle_backstop_s` (jeśli obecny) dodatnia liczba całkowita.
+    Gdy `manage=false` walidacji nie ma (sekcja może być szkicem w rezerwie). Zwraca surowy dict
+    (runner buduje z niego klienta i menedżera kontekstu; ENV czyta dopiero konstruktor klienta)."""
+    if not os.path.exists(path):
+        return dict(DEFAULT_LIFECYCLE)
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            cfg = json.load(f)
+    except (json.JSONDecodeError, OSError) as e:
+        raise ValueError(f"config.json: nie można wczytać: {e}")
+
+    st = cfg.get("stage2")
+    if not isinstance(st, dict):
+        return dict(DEFAULT_LIFECYCLE)
+    lc = st.get("lifecycle")
+    if lc is None:
+        return dict(DEFAULT_LIFECYCLE)
+    if not isinstance(lc, dict):
+        raise ValueError("config.json: sekcja 'stage2.lifecycle' musi być obiektem")
+
+    manage = bool(lc.get("manage", False))
+    if not manage:
+        # NO-OP: nie walidujemy reszty (sekcja może być szkicem w rezerwie).
+        return lc
+
+    pod_id = lc.get("pod_id")
+    if not isinstance(pod_id, str) or not pod_id:
+        raise ValueError(
+            "config.json: stage2.lifecycle.manage=true wymaga niepustego 'pod_id'"
+        )
+
+    on_finish = lc.get("on_finish", "stop")
+    if on_finish not in _LIFECYCLE_ON_FINISH:
+        raise ValueError(
+            f"config.json: stage2.lifecycle.on_finish musi być jednym z "
+            f"{_LIFECYCLE_ON_FINISH}, jest {on_finish!r}"
+        )
+
+    if "idle_backstop_s" in lc:
+        v = lc["idle_backstop_s"]
+        if isinstance(v, bool) or not isinstance(v, int) or v < 1:
+            raise ValueError(
+                f"config.json: stage2.lifecycle.idle_backstop_s musi być dodatnią liczbą "
+                f"całkowitą, jest {v!r}"
+            )
+
+    return lc
+
+
 def _main():
     """CLI: wypisz progi aktywnego/wskazanego profilu (diagnostyka). --profile <nazwa>."""
     profile = None

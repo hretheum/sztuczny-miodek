@@ -50,12 +50,25 @@ if _THIS_DIR not in sys.path:
 import metrics  # noqa: E402  (review_paragraphs_for_file — jedno źródło prawdy selekcji)
 import decision_log  # noqa: E402  (E3: wspólny strumień JSONL z D4 — append_decision/read_decisions)
 import config  # noqa: E402  (KAN-218: load_stage2 — wybór silnika Stage 2 z configu)
+import runpod_lifecycle  # noqa: E402  (KAN-220: auto-offload poda RunPod po przebiegu Stage 2)
 from engines import (  # noqa: E402
     JudgeEngine, ReviewSegment, StubJudgeEngine, OpenAICompatEngine, OllamaEngine,
 )
 
 # Wartość pola `kind` dla wpisów instrumentacji E3 (odróżnia je od wpisów D4 accept/reject).
 STAGE2_KIND = "stage2_run"
+
+# Prefiksy nazw silników ZDALNYCH (engine.name == "ollama:<m>" / "openai:<m>"). Tylko dla nich
+# auto-offload poda ma sens — atrapa (stub) jest lokalna, nie ma żadnego poda do gaszenia (KAN-220).
+_REMOTE_ENGINE_PREFIXES = ("ollama:", "openai:")
+
+
+def _is_remote_engine(engine):
+    """True, gdy silnik osądu jest zdalny (ollama/openai), więc stoi za nim pod do auto-offloadu.
+
+    Atrapa (`stub`) jest lokalna — zwraca False (managed_pod się NIE owija). Wzór z blueprintu
+    KAN-220: `engine.name.startswith(("ollama:", "openai:"))`."""
+    return str(getattr(engine, "name", "")).startswith(_REMOTE_ENGINE_PREFIXES)
 
 # Mapowanie werdyktu Stage 2 (pass/rewrite) na werdykt D4 (accept/reject), by wpis przeszedł
 # walidację decision_log (_REQUIRED zawiera verdict ∈ {accept, reject}). Sens: rewrite = trafienie
@@ -285,7 +298,18 @@ def _main(argv=None):
 
     manifest = _load_manifest(args.manifest)
     engine = build_engine_from_config(name=args.engine, config_path=args.config)
-    result = run_stage2(manifest, engine=engine)
+
+    # KAN-220: auto-offload poda RunPod. Owijamy przebieg w managed_pod TYLKO gdy
+    # lifecycle.manage ORAZ silnik zdalny (za stub/lokalnym nie ma poda do gaszenia).
+    # Domyślnie (stub / brak sekcji lifecycle) ścieżka jest IDENTYCZNA jak dotąd (NO-OP).
+    # Kontrakt run_stage2 nietknięty — owijanie żyje wyłącznie tu, w _main.
+    lifecycle = config.load_lifecycle(args.config)
+    if lifecycle.get("manage") and _is_remote_engine(engine):
+        client = runpod_lifecycle.build_client_from_lifecycle(lifecycle)
+        with runpod_lifecycle.managed_pod.from_config(client, lifecycle):
+            result = run_stage2(manifest, engine=engine)
+    else:
+        result = run_stage2(manifest, engine=engine)
 
     print(f"Stage 2 (silnik: {result['engine']}): osądzono {result['judged']} segmentów review "
           f"→ rewrite {result['rewrite']}, pass {result['pass']} → BRAMKA: {result['gate']}")

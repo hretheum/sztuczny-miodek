@@ -128,6 +128,13 @@ else
   echo "FAIL adaptery Stage 2 — mapowanie odpowiedzi na Judgement, fallback rewrite, atrybucja name, config stage2 lub fabryka silnika rozjechały się (patrz wyżej)"; fail=1
 fi
 
+echo "== Auto-offload poda RunPod: klient REST + managed_pod (3 warstwy) + load_lifecycle (KAN-220) =="
+if python3 "$DIR/../tools/check_runpod_lifecycle.py"; then
+  : # OK — komunikat wypisuje sam skrypt
+else
+  echo "FAIL auto-offload — klient REST, teardown w finally/sygnale, idempotencja, on_finish, load_lifecycle lub NO-OP manage=false rozjechał się (patrz wyżej)"; fail=1
+fi
+
 echo "== Bramka write-time: blokuje tylko twarde blokery, sama gęstość NIE (F1) =="
 if python3 "$DIR/../tools/check_write_gate.py"; then
   : # OK — komunikat wypisuje sam skrypt

@@ -53,6 +53,15 @@
     "ollama": {
       "host": "http://localhost:11434",
       "model": "bielik"
+    },
+    "lifecycle": {
+      "opis": "Auto-offload poda RunPod po przebiegu Stage 2 (KAN-220). manage=false => NO-OP (runner nie owija przebiegu, zero zmiany zachowania). Gdy manage=true: pod_id wymagany; on_finish stop (GPU gaśnie, model zostaje) lub terminate (kasacja). idle_backstop_s to próg backstopu egzekwowanego przez watchdog NA podzie (tools/runpod_idle_watchdog.sh). Klucz API z ENV (api_key_env), NIGDY z pliku.",
+      "manage": false,
+      "pod_id": "",
+      "on_finish": "stop",
+      "ensure_running": true,
+      "idle_backstop_s": 600,
+      "api_key_env": "RUNPOD_API_KEY"
     }
   }
 }
