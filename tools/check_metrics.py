@@ -22,6 +22,12 @@ E2 — weryfikuje atrybucję pracy:
   12. udziały (share) w per_rule sumują się do 1.0,
   13. atrybucja per silnik z wyniku runnera rozdziela werdykty rewrite/pass.
 
+E4 — weryfikuje wskaźnik zdrowia ekonomii (economy_health):
+  14. routed_ratio nad progiem => "ALARM",
+  15. routed_ratio pod progiem => "OK",
+  16. total_words < min_words   => "N/A" (alarm wstrzymany przy małej próbce),
+  17. alarm_threshold w wyniku = próg podany na wejściu (czytamy ten, nie inny).
+
 Exit 1 na rozjeździe (gate w run_tests.sh).
 """
 
@@ -182,6 +188,37 @@ def main():
     if ae["per_engine"][0]["engine"] != "stub":
         fails.append(f"ranking per silnik: oczekiwano 'stub' na czele, jest {ae['per_engine'][0]['engine']}")
 
+    # --- E4: wskaźnik zdrowia ekonomii (alarm na wzrost routed_ratio) ---
+    # Próg wstrzyknięty w pamięci (bez I/O config.json): alarm 10%, min. próbka 5 słów.
+    ECON = {"routed_ratio_alarm": 0.10, "min_words": 5}
+
+    # 14: routed_ratio NAD progiem => ALARM.
+    # MANIFEST: routed = słowa akapitu review (8) / total (21) ≈ 0.38 > 0.10.
+    h_alarm = metrics.economy_health(MANIFEST, economy=ECON, file_reader=_reader_ok)
+    if h_alarm["health"] != "ALARM":
+        fails.append(f"E4 alarm: routed {h_alarm['routed_ratio']:.3f} > próg {ECON['routed_ratio_alarm']} "
+                     f"powinno dać ALARM, jest {h_alarm['health']}")
+    # 17: próg w wyniku = próg na wejściu.
+    if abs(h_alarm["alarm_threshold"] - 0.10) > 1e-9:
+        fails.append(f"E4 próg: alarm_threshold {h_alarm['alarm_threshold']} != 0.10 (wejście)")
+
+    # 15: routed_ratio POD progiem => OK. Manifest bez trafień review (routed=0) i dość słów.
+    manifest_ok = {
+        "hits": [],
+        "summary": [{"file": "clean.txt", "words": 100, "hits": 0, "emdash_max": 0,
+                     "density": 0.0, "blockers": 0, "verdict": "PASS"}],
+    }
+    h_ok = metrics.economy_health(manifest_ok, economy=ECON, file_reader=lambda p: "")
+    if h_ok["health"] != "OK":
+        fails.append(f"E4 ok: routed 0% <= próg powinno dać OK, jest {h_ok['health']} ({h_ok['reason']})")
+
+    # 16: total_words < min_words => N/A (alarm wstrzymany mimo wysokiego routed_ratio).
+    ECON_BIG_SAMPLE = {"routed_ratio_alarm": 0.10, "min_words": 1000}
+    h_na = metrics.economy_health(MANIFEST, economy=ECON_BIG_SAMPLE, file_reader=_reader_ok)
+    if h_na["health"] != "N/A":
+        fails.append(f"E4 N/A: total_words {h_na['total_words']} < min_words 1000 powinno dać N/A, "
+                     f"jest {h_na['health']}")
+
     if fails:
         for f in fails:
             print(f"  [FAIL] {f}", file=sys.stderr)
@@ -192,6 +229,9 @@ def main():
     print(f"OK   metryki E2: atrybucja {a['total_hits']} trafień "
           f"(per reguła sumuje się; PL-RHYTHM/EN-DASH proceduralne, PL-SIGN deklaratywna; "
           f"ranking malejący; per silnik rozdziela rewrite/pass).")
+    print(f"OK   metryki E4: zdrowie ekonomii "
+          f"(routed nad progiem => ALARM, pod progiem => OK, próbka < min_words => N/A; "
+          f"próg czytany z wejścia).")
 
 
 if __name__ == "__main__":

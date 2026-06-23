@@ -35,5 +35,10 @@
         "density_per_500_words": 6
       }
     }
+  },
+  "economy": {
+    "opis": "Próg alarmu zdrowia ekonomii (E4). Alarm gdy routed_ratio z E1 > routed_ratio_alarm. Ref. autora 4-5%; 0.10 = ~2x norma = sygnał regresji. min_words: poniżej tylu słów łącznie nie alarmuj (za mała próbka).",
+    "routed_ratio_alarm": 0.10,
+    "min_words": 200
   }
 }

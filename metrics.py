@@ -43,6 +43,19 @@ ATRYBUCJA PRACY (E2)
 (id markera), czysto z manifestu — odpowiada na „która reguła robi modelowi najwięcej roboty".
 `attribution_from_runner` dokłada rozbicie per SILNIK z wyniku runnera Stage 2 (G1), gdy jest
 dostępny; sam manifest werdyktów silnika nie zawiera (jawne ograniczenie). Szczegóły niżej.
+
+ZDROWIE EKONOMII (E4)
+=====================
+`economy_health` bierze współczynnik redukcji (E1) i próg z configu (`config.load_economy`) i zwraca
+status zdrowia z alarmem:
+
+    health = "OK"     gdy routed_ratio <= routed_ratio_alarm,
+    health = "ALARM"  gdy routed_ratio  > routed_ratio_alarm   # za dużo treści idzie do modelu,
+                                                                # linter nie odsiewa = regresja reguł,
+    health = "N/A"    gdy total_words < min_words               # próbka za mała na wskaźnik.
+
+Próg żyje w sekcji `economy` w config.json (rodzeństwo `profiles`, nie wewnątrz `thresholds`).
+ALARM jest gate-owalny: CLI `tools/measure_health.py` daje exit 1 przy alarmie (CI/pre-publish).
 """
 
 import os
@@ -369,3 +382,74 @@ def attribution_from_runner(runner_result):
     per_engine_list.sort(key=lambda x: (-x["judged"], x["engine"]))
 
     return {"judged": total, "per_engine": per_engine_list}
+
+
+# ============================================================================
+# ZDROWIE EKONOMII (E4) — wskaźnik OK/ALARM z progiem na wzrost routed_ratio.
+# ============================================================================
+#
+# E4 stoi na E1: bierze routed_ratio (udział treści routowanej do modelu) z manifestu i porównuje
+# z progiem alarmu z configu (config.load_economy). Sens biznesowy: gdy linter przestaje odsiewać
+# (np. regresja reguł, zmiana korpusu), routed_ratio rośnie i koszt warstwy modelu skacze — to ma
+# zapalić alarm zanim wyląduje w rachunku za tokeny. Liczone CZYSTO z manifestu, bez LLM.
+
+
+def economy_health(manifest, economy=None, file_reader=_default_file_reader):
+    """Wskaźnik zdrowia ekonomii (E4): OK / ALARM / N/A z progiem alarmu na routed_ratio.
+
+    Wejście:
+      manifest    — manifest lintera (dict) {"hits":[...], "summary":[...]}.
+      economy     — opcjonalny dict {"routed_ratio_alarm","min_words"}. Brak => wczytaj z configu
+                    (config.load_economy, z fallbackiem na DEFAULT_ECONOMY). Wstrzykiwalny dla testu.
+      file_reader — przekazywany do reduction_from_manifest (mapowanie trafień na akapity).
+
+    Zwraca:
+        {
+          "health": "OK" | "ALARM" | "N/A",
+          "routed_ratio": float,        # z E1
+          "reduction_ratio": float,     # z E1 (dopełnienie)
+          "alarm_threshold": float,     # routed_ratio_alarm użyty do oceny
+          "total_words": int,
+          "min_words": int,
+          "reason": str,                # czytelne uzasadnienie werdyktu
+        }
+
+    Reguła:
+      total_words < min_words            -> "N/A"  (za mała próbka, nie alarmujemy),
+      routed_ratio <= alarm_threshold    -> "OK",
+      routed_ratio  > alarm_threshold    -> "ALARM".
+    """
+    if economy is None:
+        # Lokalny import, żeby nie wymuszać configu przy samym imporcie metrics.
+        import config as _config  # noqa: E402
+        economy = _config.load_economy()
+
+    alarm = float(economy.get("routed_ratio_alarm", 0.10))
+    min_words = int(economy.get("min_words", 200))
+
+    red = reduction_from_manifest(manifest, file_reader=file_reader)
+    routed_ratio = red["routed_ratio"]
+    total_words = red["total_words"]
+
+    if total_words < min_words:
+        health = "N/A"
+        reason = (f"próbka za mała: {total_words} słów < min_words {min_words} "
+                  f"(wskaźnik niewiarygodny, alarm wstrzymany)")
+    elif routed_ratio > alarm:
+        health = "ALARM"
+        reason = (f"routed_ratio {routed_ratio*100:.1f}% > próg {alarm*100:.1f}% "
+                  f"(za dużo treści idzie do modelu — możliwa regresja reguł lub zmiana korpusu)")
+    else:
+        health = "OK"
+        reason = (f"routed_ratio {routed_ratio*100:.1f}% <= próg {alarm*100:.1f}% "
+                  f"(linter odsiewa zgodnie z odniesieniem ~4–5%)")
+
+    return {
+        "health": health,
+        "routed_ratio": routed_ratio,
+        "reduction_ratio": red["reduction_ratio"],
+        "alarm_threshold": alarm,
+        "total_words": total_words,
+        "min_words": min_words,
+        "reason": reason,
+    }

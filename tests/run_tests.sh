@@ -98,11 +98,20 @@ else
   echo "FAIL adapter strukturalny — ekstrakcja prozy z HTML rozjechała się (patrz wyżej)"; fail=1
 fi
 
-echo "== Metryki: redukcja/atrybucja z manifestu (E1/E2) =="
+echo "== Metryki: redukcja/atrybucja/zdrowie ekonomii z manifestu (E1/E2/E4) =="
 if python3 "$DIR/../tools/check_metrics.py"; then
   : # OK — komunikat wypisuje sam skrypt
 else
-  echo "FAIL metryki — redukcja (routed vs block vs czysty) lub atrybucja (warstwa/reguła/silnik) rozjechał się (patrz wyżej)"; fail=1
+  echo "FAIL metryki — redukcja (routed vs block vs czysty), atrybucja (warstwa/reguła/silnik) lub alarm zdrowia ekonomii (E4) rozjechał się (patrz wyżej)"; fail=1
+fi
+
+echo "== Zdrowie ekonomii (E4): smoke CLI end-to-end (linter -> manifest -> health, czysty=OK) =="
+# Czysty plik kontrolny: routed=0% => STATUS OK => exit 0. Wymusza spójność lintera, metrics i CLI.
+if python3 "$DIR/../ai_linter.py" --format json "$DIR/control_pl_clean.md" 2>/dev/null \
+     | python3 "$DIR/../tools/measure_health.py" --min-words 1 >/dev/null; then
+  echo "OK   zdrowie ekonomii — czysty plik daje STATUS OK (exit 0); ALARM dałby exit 1 (gate-owalne)."
+else
+  echo "FAIL zdrowie ekonomii (E4) — measure_health na czystym pliku zwrócił niezerowy kod (patrz wyżej)"; fail=1
 fi
 
 echo "== Runner Stage 2: selekcja review + atrapa + bramka (G1) + instrumentacja log stage2_run (E3) =="

@@ -11,7 +11,9 @@ Styk z B3 (metodyka kalibracji): kalibracja na korpusie+logu (D4) zapisuje wynik
 proceduralne ≠ deklaratywne — `prog` w rules.json dotyczy reguł regex z progiem, config.json
 dotyczy detektorów proceduralnych; oba to „progi jako dane".
 
-API: load_thresholds(profile=None, path=CONFIG_PATH) -> dict (klucz→wartość progu).
+API:
+  load_thresholds(profile=None, path=CONFIG_PATH) -> dict (klucz→wartość progu).
+  load_economy(path=CONFIG_PATH)  -> dict (próg alarmu ekonomii E4; górna sekcja `economy`).
 """
 
 import json
@@ -73,6 +75,71 @@ def load_thresholds(profile: str = None, path: str = CONFIG_PATH) -> dict:
         if not isinstance(v, int) or isinstance(v, bool) or v < 1:
             raise ValueError(f"config.json: próg {k} musi być dodatnią liczbą całkowitą, jest {v!r}")
         out[k] = v
+    return out
+
+
+# ============================================================================
+# E4 — próg alarmu zdrowia ekonomii (sekcja `economy`, rodzeństwo `profiles`).
+# ============================================================================
+#
+# Sekcja `economy` jest CELOWO poza `profiles[*].thresholds`: load_thresholds
+# waliduje DOKŁADNY zestaw kluczy progów i odrzuciłby nadmiarowe. Próg E4 czytamy
+# osobną funkcją, więc load_thresholds zostaje nietknięty (zero ryzyka regresji D1).
+#
+# Fallback (brak sekcji `economy` lub brak configu) = wartości domyślne →
+# zero zmiany zachowania bez configu, spójnie z konwencją load_thresholds.
+
+DEFAULT_ECONOMY = {
+    # Alarm gdy udział treści routowanej (routed_ratio z E1) przekracza ten próg.
+    # Odniesienie autora: 0.04–0.05; 0.10 = ~2x norma = sygnał regresji reguł / lintera.
+    "routed_ratio_alarm": 0.10,
+    # Poniżej tylu słów łącznie nie alarmuj (próbka za mała na wiarygodny wskaźnik).
+    "min_words": 200,
+}
+
+
+def load_economy(path: str = CONFIG_PATH) -> dict:
+    """Zwraca próg alarmu zdrowia ekonomii (E4) z sekcji `economy` configu.
+
+    Zwraca {"routed_ratio_alarm": float, "min_words": int}. Brak configu albo brak sekcji
+    `economy` → DEFAULT_ECONOMY (bezpieczny fallback, zero zmiany zachowania bez configu).
+    Nadpisuje tylko klucze obecne w configu; reszta z domyślnych (tolerancyjnie, bo to raport
+    diagnostyczny, nie twarda walidacja jak progi).
+
+    Walidacja wartości obecnych w configu: `routed_ratio_alarm` w (0, 1], `min_words` >= 0.
+    Wartość niepoprawna → czytelny ValueError.
+    """
+    out = dict(DEFAULT_ECONOMY)
+    if not os.path.exists(path):
+        return out
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            cfg = json.load(f)
+    except (json.JSONDecodeError, OSError) as e:
+        raise ValueError(f"config.json: nie można wczytać: {e}")
+
+    econ = cfg.get("economy")
+    if econ is None:
+        return out
+    if not isinstance(econ, dict):
+        raise ValueError("config.json: sekcja 'economy' musi być obiektem")
+
+    if "routed_ratio_alarm" in econ:
+        v = econ["routed_ratio_alarm"]
+        if isinstance(v, bool) or not isinstance(v, (int, float)) or not (0.0 < v <= 1.0):
+            raise ValueError(
+                f"config.json: economy.routed_ratio_alarm musi być liczbą w (0, 1], jest {v!r}"
+            )
+        out["routed_ratio_alarm"] = float(v)
+
+    if "min_words" in econ:
+        v = econ["min_words"]
+        if isinstance(v, bool) or not isinstance(v, int) or v < 0:
+            raise ValueError(
+                f"config.json: economy.min_words musi być nieujemną liczbą całkowitą, jest {v!r}"
+            )
+        out["min_words"] = v
+
     return out
 
 

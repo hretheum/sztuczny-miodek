@@ -1,9 +1,10 @@
-# Metryki z manifestu — redukcja (E1) i atrybucja pracy (E2)
+# Metryki z manifestu — redukcja (E1), atrybucja pracy (E2), zdrowie ekonomii (E4)
 
 Miary ekonomii i obserwowalności liczone z **manifestu** lintera (Stage 1), bez kosztu tokenów i
 bez wołania LLM. Moduł: `metrics.py`. ZERO-DEP (stdlib `re`, plus `ai_linter` dla segmentacji i
-klasyfikacji warstw). CLI: `tools/measure_reduction.py` (E1), `tools/measure_attribution.py` (E2).
-Gate: `tools/check_metrics.py` (obejmuje E1 i E2).
+klasyfikacji warstw, plus `config` dla progu alarmu E4). CLI: `tools/measure_reduction.py` (E1),
+`tools/measure_attribution.py` (E2), `tools/measure_health.py` (E4).
+Gate: `tools/check_metrics.py` (obejmuje E1, E2 i E4).
 
 ## Po co
 
@@ -172,6 +173,73 @@ Na zaszytym mini-manifeście i treści w pamięci sprawdza:
   akapitu review, inwariant `reduction + routed == 1`, wariant awaryjny (`fallback`),
 - **E2**: `per_rule` sumuje się do `total_hits == len(hits)`, `PL-RHYTHM`/`EN-DASH` => proceduralna,
   `PL-SIGN` => deklaratywna, ranking malejący, udziały sumują się do 1.0, oraz atrybucja per silnik z
-  wyniku runnera rozdziela `rewrite`/`pass`.
+  wyniku runnera rozdziela `rewrite`/`pass`,
+- **E4**: `routed_ratio` nad progiem => `ALARM`, pod progiem => `OK`, `total_words < min_words` => `N/A`,
+  a `alarm_threshold` w wyniku jest tym progiem, który podano na wejściu.
 
-Wpięty do `tests/run_tests.sh` jako warstwa „Metryki: redukcja/atrybucja z manifestu (E1/E2)".
+Wpięty do `tests/run_tests.sh` jako warstwa „Metryki: redukcja/atrybucja/zdrowie ekonomii z manifestu
+(E1/E2/E4)". Osobna warstwa „Zdrowie ekonomii (E4): smoke CLI end-to-end" uruchamia
+`ai_linter --format json` na czystym pliku kontrolnym i przepuszcza manifest przez `measure_health.py`,
+sprawdzając, że czysty plik daje `OK` (exit 0) — to spina linter, `metrics` i CLI w jednym przebiegu.
+
+# Zdrowie ekonomii (E4)
+
+E4 stoi na E1: bierze `routed_ratio` (udział treści routowanej do modelu) z manifestu i porównuje z
+**progiem alarmu** z `config.json` (sekcja `economy`). Sens: gdy linter przestaje odsiewać (regresja
+reguł, zmiana korpusu), `routed_ratio` rośnie i koszt warstwy modelu skacze — alarm ma zapalić się,
+zanim wyląduje w rachunku za tokeny. Liczone czysto z manifestu, bez LLM. Funkcja `economy_health`.
+
+## Próg w `config.json` (sekcja `economy`)
+
+Próg żyje w **górnej sekcji `economy`** — rodzeństwo `profiles`, **nie** wewnątrz `thresholds` (bo
+`config.load_thresholds` waliduje dokładny zestaw kluczy progów i odrzuciłby nadmiarowe). Czytany
+osobną funkcją `config.load_economy`, więc `load_thresholds` (D1) zostaje nietknięty.
+
+```json
+{ "economy": {
+    "routed_ratio_alarm": 0.10,   // alarm gdy routed_ratio > 10% (ref. autora 4–5%; 2x = sygnał regresji)
+    "min_words": 200              // poniżej tylu słów łącznie nie alarmuj (za mała próbka)
+  } }
+```
+
+Fallback: brak `config.json` lub brak sekcji `economy` => `config.DEFAULT_ECONOMY`
+(`routed_ratio_alarm=0.10`, `min_words=200`). Zero zmiany zachowania bez configu, spójnie z
+konwencją `load_thresholds`. Walidacja wartości obecnych w configu: `routed_ratio_alarm` w `(0, 1]`,
+`min_words >= 0`; wartość niepoprawna => czytelny `ValueError`.
+
+## Reguła zdrowia
+
+```
+total_words < min_words            ->  "N/A"   (próbka za mała, alarm wstrzymany)
+routed_ratio <= routed_ratio_alarm ->  "OK"
+routed_ratio  > routed_ratio_alarm ->  "ALARM"
+```
+
+## Wynik (`economy_health`)
+
+```json
+{ "health": "ALARM", "routed_ratio": 0.955, "reduction_ratio": 0.045,
+  "alarm_threshold": 0.10, "total_words": 112, "min_words": 50,
+  "reason": "routed_ratio 95.5% > próg 10.0% (za dużo treści idzie do modelu — możliwa regresja reguł …)" }
+```
+
+## API
+
+```python
+import metrics
+h = metrics.economy_health(manifest)                       # próg z config.load_economy()
+h = metrics.economy_health(manifest, economy={"routed_ratio_alarm": 0.08, "min_words": 50})  # wstrzyknięty
+```
+
+## CLI E4 (`tools/measure_health.py`)
+
+```bash
+python3 ai_linter.py --format json *.md > manifest.json
+python3 tools/measure_health.py --manifest manifest.json          # raport OK/ALARM/N/A
+python3 ai_linter.py --format json *.md | python3 tools/measure_health.py   # przez stdin
+python3 tools/measure_health.py --manifest manifest.json --json            # surowy JSON
+python3 tools/measure_health.py --manifest manifest.json --alarm 0.08      # nadpisz próg z config.json
+python3 tools/measure_health.py --manifest manifest.json --min-words 50    # nadpisz min. próbkę
+```
+
+**Exit 1 gdy `health == "ALARM"`** (gate-owalne w CI/pre-publish); `OK` i `N/A` => exit 0.
