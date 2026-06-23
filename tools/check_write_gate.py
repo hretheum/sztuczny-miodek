@@ -115,7 +115,9 @@ def main():
             f"— sama gęstość NIE blokuje write-time end-to-end; było {rc_density}."
         )
 
-    # (g) smoke hook-mode: payload na stdin + MIODEK_WRITE_GATE=1 → decision block dla baseline.
+    # (g) smoke hook-mode: payload na stdin + MIODEK_WRITE_GATE=1 → blokada dla baseline.
+    #     Blokada jest dwukanałowa: JSON decision=block na stdout ORAZ exit 2 z reason na stderr
+    #     (kanon PostToolUse, odporność na wersję Claude Code).
     env = dict(os.environ, MIODEK_WRITE_GATE="1")
     payload = json.dumps({
         "tool_name": "Write",
@@ -124,15 +126,19 @@ def main():
     proc = subprocess.run(
         [sys.executable, GATE_SCRIPT], input=payload, capture_output=True, text=True, env=env
     )
-    if proc.returncode != 0:
-        fails.append(f"(g) hook-mode zawsze exit 0; było {proc.returncode}.")
+    if proc.returncode != 2:
+        fails.append(f"(g) hook-mode na baseline powinien blokować exit 2 (kanon PostToolUse); było {proc.returncode}.")
+    if "TWARDE BLOKERY" not in proc.stderr:
+        fails.append("(g) hook-mode na baseline powinien wypisać powód na stderr (kanał exit 2).")
     try:
         decision = json.loads(proc.stdout) if proc.stdout.strip() else {}
     except Exception:
         decision = {}
         fails.append("(g) hook-mode na baseline nie zwrócił poprawnego JSON na stdout.")
     if decision.get("decision") != "block":
-        fails.append("(g) hook-mode (MIODEK_WRITE_GATE=1) na baseline powinien dać decision=block.")
+        fails.append("(g) hook-mode (MIODEK_WRITE_GATE=1) na baseline powinien dać decision=block na stdout.")
+    if decision.get("hookSpecificOutput", {}).get("permissionDecision") != "deny":
+        fails.append("(g) hook-mode na baseline powinien dać hookSpecificOutput.permissionDecision=deny (lustro dla nowszej konwencji).")
 
     # (h) opt-in: bez MIODEK_WRITE_GATE hook-mode nie blokuje (puste stdout).
     env_off = {k: v for k, v in os.environ.items() if k != "MIODEK_WRITE_GATE"}
@@ -141,6 +147,23 @@ def main():
     )
     if proc_off.stdout.strip():
         fails.append("(h) bez MIODEK_WRITE_GATE hook-mode powinien być bierny (puste stdout), a coś wypisał.")
+    if proc_off.returncode != 0:
+        fails.append(f"(h) bez MIODEK_WRITE_GATE hook-mode powinien exit 0 (bierny), było {proc_off.returncode}.")
+
+    # (i) smoke hook-mode na pliku z samą gęstością (FAIL, blockers==0) → NIE blokuje:
+    #     exit 0, puste stdout (serce F1 także w pełnym przebiegu hook-mode).
+    density_only = os.path.join(TESTS_DIR, "triad_eval.md")
+    payload_density = json.dumps({
+        "tool_name": "Write",
+        "tool_input": {"file_path": density_only, "content": ""},
+    })
+    proc_density = subprocess.run(
+        [sys.executable, GATE_SCRIPT], input=payload_density, capture_output=True, text=True, env=env
+    )
+    if proc_density.returncode != 0:
+        fails.append(f"(i) hook-mode na triad_eval.md (sama gęstość) powinien exit 0 (nie blokuje), było {proc_density.returncode}.")
+    if proc_density.stdout.strip():
+        fails.append("(i) hook-mode na triad_eval.md (sama gęstość) nie powinien nic wypisać na stdout — to serce F1.")
 
     if fails:
         for f in fails:

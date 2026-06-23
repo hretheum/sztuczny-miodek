@@ -48,14 +48,25 @@ Wejście (stdin, JSON od Claude Code):
 }
 ```
 
-Wyjście przy twardym blokerze (stdout, JSON, exit 0):
+Wyjście przy twardym blokerze — blokada DWUkanałowa (odporność na wersję Claude Code,
+bo dwie udokumentowane konwencje PostToolUse współistnieją):
+
+1. stdout, JSON: pole `decision: "block"` z `reason`, oraz lustrzane
+   `hookSpecificOutput.permissionDecision: "deny"` i `systemMessage` (nowsza konwencja).
+2. exit 2 z powodem na stderr — kanoniczny blocking PostToolUse: stderr wraca do Claude
+   jako błąd. Ten kanał działa niezależnie od tego, jak parser interpretuje JSON.
 
 ```json
-{ "decision": "block", "reason": "Bramka write-time...: TWARDE BLOKERY...\n  plik.md: 4 blokerów..." }
+{
+  "decision": "block",
+  "reason": "Bramka write-time...: TWARDE BLOKERY...\n  plik.md: 2 blokerów...",
+  "hookSpecificOutput": { "hookEventName": "PostToolUse", "permissionDecision": "deny" },
+  "systemMessage": "Bramka write-time...: TWARDE BLOKERY..."
+}
 ```
 
-Brak twardych blokerów: brak wyjścia (lub samo ostrzeżenie gęstości pominięte
-w hook-mode), exit 0. Hook nigdy nie blokuje kodem wyjścia, decyzję niesie pole JSON.
+Brak twardych blokerów (w tym sama wysoka gęstość): brak wyjścia, exit 0. Bramka
+przepuszcza zapis. Tylko twardy bloker schodzi do exit 2 / `decision: block`.
 
 ## Tryb 2: CLI / git pre-commit (ścieżki w argv)
 

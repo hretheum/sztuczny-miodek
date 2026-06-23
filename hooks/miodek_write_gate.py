@@ -16,7 +16,9 @@ KLUCZOWY NIUANS WERDYKTU (potwierdzony w ai_linter.py:536-543):
 Dwa tryby:
   1. Hook Claude Code (bez argumentów): czyta payload JSON ze stdin
      ({tool_name, tool_input:{file_path,...}}), filtruje do .md/.txt, lintuje,
-     i przy blokerach wypisuje na stdout {"decision":"block","reason":...} (exit 0).
+     i przy twardym blokerze blokuje DWUkanałowo (odporność na wersję CC):
+     stdout {"decision":"block",...,"hookSpecificOutput":{permissionDecision:"deny"}}
+     ORAZ exit 2 z powodem na stderr (kanon PostToolUse). Brak blokera → exit 0.
      OPT-IN: aktywna tylko gdy MIODEK_WRITE_GATE ∈ {1,true,on} — sama instalacja
      pluginu NIE zaczyna blokować edycji.
   2. CLI / pre-commit (ścieżki w argv): lintuje podane pliki, wypisuje powód
@@ -134,8 +136,15 @@ def _is_prose(path):
 
 
 def hook_mode():
-    """Tryb hooka Claude Code: payload JSON na stdin → ewentualna decyzja block na stdout.
-    Zawsze exit 0 (decyzja przekazywana polem JSON, nie kodem). Fail-open."""
+    """Tryb hooka Claude Code (PostToolUse): payload JSON na stdin → decyzja.
+
+    Przy twardym blokerze blokujemy DWUkanałowo, dla odporności na wersję
+    Claude Code (dwie udokumentowane konwencje PostToolUse współistnieją):
+      1. stdout: JSON {"decision":"block","reason":...} oraz lustrzane
+         hookSpecificOutput.permissionDecision="deny" + systemMessage;
+      2. exit 2 z powodem na stderr — kanoniczny blocking, stderr trafia z powrotem
+         do Claude jako błąd. Ten kanał jest pewny niezależnie od parsera JSON.
+    Brak blokera (w tym sama gęstość) → exit 0, brak wyjścia. Fail-open."""
     if not _enabled():
         return 0  # opt-in: bez MIODEK_WRITE_GATE bramka jest bierna
 
@@ -157,7 +166,18 @@ def hook_mode():
 
     block, reason = gate_decision(manifest)
     if block:
-        print(json.dumps({"decision": "block", "reason": reason}, ensure_ascii=False))
+        out = {
+            "decision": "block",
+            "reason": reason,
+            "hookSpecificOutput": {
+                "hookEventName": "PostToolUse",
+                "permissionDecision": "deny",
+            },
+            "systemMessage": reason,
+        }
+        print(json.dumps(out, ensure_ascii=False))   # kanał 1: JSON na stdout
+        print(reason, file=sys.stderr)                # kanał 2: stderr + exit 2
+        return 2
     return 0
 
 

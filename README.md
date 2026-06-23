@@ -113,7 +113,7 @@ Plugin deklaruje hook `PostToolUse` na `Write|Edit|MultiEdit` w `hooks/hooks.jso
 export MIODEK_WRITE_GATE=1   # albo true / on / yes
 ```
 
-Przy twardym blokerze hook zwraca decyzję `block` z powodem (lista blokerów: ID markera, numer linii, fragment), żeby agent wiedział, co poprawić. Bez ustawionej zmiennej hook kończy natychmiast bez działania.
+Przy twardym blokerze hook blokuje zapis dwoma kanałami naraz, dla odporności na wersję Claude Code: na stdout wypisuje JSON z polem `decision: block` i powodem (oraz lustrzane `hookSpecificOutput.permissionDecision: deny`), a równolegle kończy kodem 2 z tym samym powodem na stderr (kanon PostToolUse, stderr wraca do agenta). Powód to lista blokerów: ID markera, numer linii, fragment, żeby agent wiedział, co poprawić. Sama wysoka gęstość przechodzi (exit 0, brak wyjścia). Bez ustawionej zmiennej hook kończy natychmiast bez działania.
 
 ### Użycie jako git pre-commit
 
