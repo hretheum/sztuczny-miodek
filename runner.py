@@ -272,6 +272,28 @@ def build_engine_from_config(name=None, config_path=config.CONFIG_PATH):
     raise ValueError(f"nieznany silnik Stage 2: {engine!r} (dozwolone: stub, openai, ollama)")
 
 
+def run_stage2_managed(manifest, engine, config_path=config.CONFIG_PATH,
+                       file_reader=metrics._default_file_reader, log_path=None, ts_provider=None):
+    """Owija run_stage2 w auto-offload poda RunPod (KAN-220), gdy silnik jest zdalny.
+
+    JEDNO ŹRÓDŁO PRAWDY orkiestracji lifecycle: woła ją zarówno CLI runnera (`_main`), jak i
+    bramka przed publikacją (F3, `tools/publish_gate.py`). Dzięki temu F3 dostaje auto-gaszenie
+    poda za darmo, a wzór `load_lifecycle + _is_remote_engine + managed_pod` nie jest duplikowany.
+
+    Kontrakt: identyczny zwrot co run_stage2. Owijanie managed_pod aktywne TYLKO gdy
+    `lifecycle.manage` ORAZ silnik zdalny (ollama/openai) — za atrapą/lokalnym silnikiem ścieżka
+    jest IDENTYCZNA jak run_stage2 (NO-OP). To realizuje „bez żywego endpointu => zero sieci":
+    domyślny config (stub, manage=false) nigdy nie buduje klienta RunPoda."""
+    lifecycle = config.load_lifecycle(config_path)
+    if lifecycle.get("manage") and _is_remote_engine(engine):
+        client = runpod_lifecycle.build_client_from_lifecycle(lifecycle)
+        with runpod_lifecycle.managed_pod.from_config(client, lifecycle):
+            return run_stage2(manifest, engine=engine, file_reader=file_reader,
+                              log_path=log_path, ts_provider=ts_provider)
+    return run_stage2(manifest, engine=engine, file_reader=file_reader,
+                      log_path=log_path, ts_provider=ts_provider)
+
+
 def _load_manifest(path):
     """Wczytuje manifest z pliku JSON; '-' = stdin."""
     if path == "-":
@@ -299,17 +321,11 @@ def _main(argv=None):
     manifest = _load_manifest(args.manifest)
     engine = build_engine_from_config(name=args.engine, config_path=args.config)
 
-    # KAN-220: auto-offload poda RunPod. Owijamy przebieg w managed_pod TYLKO gdy
-    # lifecycle.manage ORAZ silnik zdalny (za stub/lokalnym nie ma poda do gaszenia).
-    # Domyślnie (stub / brak sekcji lifecycle) ścieżka jest IDENTYCZNA jak dotąd (NO-OP).
-    # Kontrakt run_stage2 nietknięty — owijanie żyje wyłącznie tu, w _main.
-    lifecycle = config.load_lifecycle(args.config)
-    if lifecycle.get("manage") and _is_remote_engine(engine):
-        client = runpod_lifecycle.build_client_from_lifecycle(lifecycle)
-        with runpod_lifecycle.managed_pod.from_config(client, lifecycle):
-            result = run_stage2(manifest, engine=engine)
-    else:
-        result = run_stage2(manifest, engine=engine)
+    # KAN-220: auto-offload poda RunPod. Orkiestracja lifecycle wydzielona do
+    # run_stage2_managed (jedno źródło prawdy, reużywane przez F3). Owijanie managed_pod
+    # aktywne TYLKO gdy lifecycle.manage ORAZ silnik zdalny; domyślnie (stub / manage=false)
+    # ścieżka jest IDENTYCZNA jak dotąd (NO-OP). Kontrakt run_stage2 nietknięty.
+    result = run_stage2_managed(manifest, engine=engine, config_path=args.config)
 
     print(f"Stage 2 (silnik: {result['engine']}): osądzono {result['judged']} segmentów review "
           f"→ rewrite {result['rewrite']}, pass {result['pass']} → BRAMKA: {result['gate']}")

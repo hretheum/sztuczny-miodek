@@ -149,6 +149,13 @@ else
   echo "FAIL bramka CI — ci_gate przepuścił FAIL/gęstość, wywrócił się na braku plików prozy albo workflow zgubił krytyczne pola (patrz wyżej)"; fail=1
 fi
 
+echo "== Bramka przed publikacją: pełny werdykt Stage 1 plus opcjonalny osąd Stage 2 offline (F3) =="
+if python3 "$DIR/../tools/check_publish_gate.py"; then
+  : # OK — komunikat wypisuje sam skrypt
+else
+  echo "FAIL bramka przed publikacją — publish_gate przepuścił FAIL/gęstość, Stage 2 ze stubem nie jest surowszy niż F2, błąd silnika nie dał exit 2, albo README zgubił sekcję F3 (patrz wyżej)"; fail=1
+fi
+
 if [[ $fail -eq 0 ]]; then
   echo "WSZYSTKIE TESTY PRZESZŁY."
 else

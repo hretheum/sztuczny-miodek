@@ -129,13 +129,13 @@ W roli `pre-commit` zatrzyma commit, gdy któryś plik prozy ma twardy bloker. B
 
 Druga bramka działa na pull requeście, nie przy zapisie. Workflow `.github/workflows/miodek-gate.yml` (GitHub Actions, trigger `pull_request`) liczy pliki prozy (`.md`/`.txt`) ZMIENIONE w PR względem bazy, woła na nich `ai_linter.py` i FAIL-uje check przy PEŁNYM werdykcie. Sterownik to `tools/ci_gate.py` (zero zależności, czysta biblioteka standardowa plus git).
 
-Kluczowa różnica wobec write-time. Bramka CI zatrzymuje cały pełny werdykt, czyli `FAIL` oraz `FAIL-HARD`, a więc także samą gęstość ponad próg, nie tylko twarde blokery. To odwrotna polityka niż write-time, która gęstość przepuszcza. Z tabeli trzech bramek (sekcja wyżej) bierze wiersz „CI": pełny werdykt, łapie też samą gęstość. Trzecia bramka, przed publikacją (osąd modelu Stage 2), jeszcze nie istnieje.
+Kluczowa różnica wobec write-time. Bramka CI zatrzymuje cały pełny werdykt, czyli `FAIL` oraz `FAIL-HARD`, a więc także samą gęstość ponad próg, nie tylko twarde blokery. To odwrotna polityka niż write-time, która gęstość przepuszcza. Z tabeli trzech bramek (sekcja wyżej) bierze wiersz „CI": pełny werdykt, łapie też samą gęstość. Trzecią bramkę, przed publikacją (z opcjonalnym osądem modelu Stage 2), opisuje sekcja „Bramka przed publikacją (F3)" niżej.
 
 | Bramka | Polityka | Zakres |
 |---|---|---|
 | write-time (F1) | tylko twarde blokery, gęstość przechodzi | zapisywany plik, opt-in (`MIODEK_WRITE_GATE=1`) |
 | CI na MR (F2) | pełny werdykt FAIL/FAIL-HARD, w tym sama gęstość | pliki prozy zmienione w PR względem bazy |
-| przed publikacją (F3) | pełny werdykt plus osąd modelu | jeszcze nie ma |
+| przed publikacją (F3) | pełny werdykt Stage 1 plus opcjonalny osąd Stage 2 (opt-in, domyślnie wyłączony) | jawnie wskazane pliki do publikacji |
 
 Zakres ograniczony do zmienionych plików jest celowy. Bramka FAIL-uje wyłącznie na prozie tkniętej w PR, nigdy na zastanym długu w plikach nieruszanych. Diff liczony jest symetrycznie od wspólnego przodka (`base...HEAD`, trzy kropki), kanon recenzji PR. Plik bez żadnej zmienionej prozy daje zielony check (exit 0), nie błąd.
 
@@ -155,6 +155,42 @@ python3 tools/ci_gate.py --changed --base origin/main   # tryb CI: diff względe
 ```
 
 W przeciwieństwie do write-time bramka CI nie jest fail-open: błąd reguł lub konfiguracji lintera kończy check niezerowo, bo to bramka jakości przed mergem. Self-test rdzenia: `tools/check_ci_gate.py` (wpięty do `tests/run_tests.sh`).
+
+## Bramka przed publikacją (F3)
+
+Trzecia i najsurowsza bramka to wymienny krok wołany PRZED publikacją prozy (wysyłka na Confluence, Notion lub stronę). Inny przepływ publikacji woła ją na jawnie wskazanych plikach „do publikacji", żeby zatrzymać tekst nieprzechodzący jakości. Sterownik to `tools/publish_gate.py` (zero zależności, czysta biblioteka standardowa). Bramka ma dwa poziomy.
+
+Stage 1 działa zawsze. To pełny werdykt lintera na podanych plikach, ta sama polityka co F2, tylko na jawnych plikach zamiast na diffie. Werdykt `FAIL` albo `FAIL-HARD` (blokery lub gęstość ponad próg) zamyka publikację. Stage 1 reużywa `ci_gate.filter_prose` i `ci_gate.run_linter`, więc polityka pełnego werdyktu jest jednym kodem dla F2 i F3.
+
+Stage 2 jest opcjonalny i włącza się flagą `--stage2`. Buduje manifest (`ai_linter.py --format json`), wybiera silnik osądu z `config.json` (sekcja `stage2`) przez `runner.build_engine_from_config` i woła `runner.run_stage2_managed` (osąd plus auto-offload poda RunPod dla silników zdalnych). Bramka jest surowa: jakikolwiek werdykt `rewrite` zamyka publikację. To realizuje zasadę „PASS z uwagami to NIE PASS", więc F3 jako jedyna może dołożyć osąd modelu i jest tym surowsza niż F2.
+
+Czym F3 różni się od dwóch pozostałych bramek:
+
+| Bramka | Polityka | Zakres | Model |
+|---|---|---|---|
+| write-time (F1) | tylko twarde blokery, gęstość przechodzi | zapisywany plik | nie |
+| CI na MR (F2) | pełny werdykt Stage 1 | pliki prozy zmienione w PR | nie |
+| przed publikacją (F3) | pełny werdykt Stage 1 plus opcjonalny osąd Stage 2 | jawnie wskazane pliki do publikacji | opcjonalnie (opt-in) |
+
+Domyślnie F3 nie sięga sieci. Bez `--stage2` woła sam Stage 1, więc nie buduje silnika ani nie rusza modelu. Z `--stage2` na domyślnym configu (`stage2.engine` to `stub`) buduje atrapę `StubJudgeEngine`, czyli osąd offline bez sieci. Realny endpoint wymaga jawnej zmiany `config.json` na `openai` albo `ollama` (lub flagi `--engine`) oraz klucza w zmiennej środowiskowej. To znaczy: nawet z włączonym Stage 2 sieć rusza dopiero po świadomym wskazaniu żywego silnika.
+
+Kody wyjścia `publish_gate.py`:
+
+| Exit | Znaczenie |
+|---|---|
+| 0 | brak prozy LUB Stage 1 PASS i (Stage 2 wyłączony LUB gate PASS) |
+| 1 | Stage 1 FAIL/FAIL-HARD (blokery lub gęstość) LUB Stage 2 gate FAIL (jakiś `rewrite`) |
+| 2 | błąd reguł/konfiguracji lintera LUB błąd budowy silnika LUB niepoprawny manifest (bramka jakości nie zazielenia się po cichu) |
+
+Wpięcie w przepływ publikacji i ręczne użycie:
+
+```bash
+python3 tools/publish_gate.py artykul.md notatka.txt          # sam Stage 1 (zero sieci)
+python3 tools/publish_gate.py --stage2 artykul.md             # plus osąd Stage 2 (silnik z config.json)
+python3 tools/publish_gate.py --stage2 --engine ollama art.md # Stage 2 na wskazanym silniku
+```
+
+Przepływ publikacji woła ten krok przed wysyłką i przerywa wysyłkę na kodzie niezerowym. Jak F2, F3 nie jest fail-open: błąd reguł albo budowy silnika kończy się niezerowo, bo to bramka jakości. Self-test rdzenia: `tools/check_publish_gate.py` (wpięty do `tests/run_tests.sh`, w całości offline na atrapie silnika).
 
 ## Testy
 
