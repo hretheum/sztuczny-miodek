@@ -143,6 +143,74 @@ def load_economy(path: str = CONFIG_PATH) -> dict:
     return out
 
 
+# ============================================================================
+# KAN-218 — wybór silnika osądu Stage 2 (sekcja `stage2`, rodzeństwo `economy`).
+# ============================================================================
+#
+# Sekcja `stage2` jest CELOWO poza `profiles` i `economy`: load_thresholds i load_economy
+# walidują swoje sekcje i ignorują tę nową. Wybór silnika czytamy osobną funkcją
+# load_stage2, więc load_thresholds (D1) i load_economy (E4) zostają nietknięte.
+#
+# Fallback (brak sekcji `stage2` lub brak configu) => {"engine": "stub"} → zero zmiany
+# zachowania bez configu (runner i tak domyślnie buduje atrapę). Klucz API NIGDY w pliku —
+# config trzyma tylko nazwę zmiennej środowiskowej (api_key_env); sekret czyta konstruktor
+# silnika z os.environ. Separacja: config = CO, ENV = SEKRET.
+
+DEFAULT_STAGE2 = {"engine": "stub"}
+
+_STAGE2_ENGINES = ("stub", "openai", "ollama")
+# Klucze wymagane w podsłowniku konfiguracji dla każdego realnego silnika.
+_STAGE2_REQUIRED = {
+    "openai": ("base_url", "model"),
+    "ollama": ("host", "model"),
+}
+
+
+def load_stage2(path: str = CONFIG_PATH) -> dict:
+    """Zwraca konfigurację wyboru silnika Stage 2 (sekcja `stage2` configu).
+
+    Brak configu albo brak sekcji `stage2` → DEFAULT_STAGE2 ({"engine": "stub"}): bezpieczny
+    fallback, zero zmiany zachowania bez configu. Zwraca SUROWY dict konfiguracji (runner
+    buduje z niego instancję silnika; ENV czyta dopiero konstruktor silnika, nie ta funkcja).
+
+    Walidacja: `engine` ∈ {stub, openai, ollama}; dla openai/ollama wymagany podsłownik o tej
+    nazwie z wymaganymi kluczami (openai: base_url+model; ollama: host+model). Brak → czytelny
+    ValueError. Sekcje nieaktywnych silników nie są walidowane (to tylko parametry w rezerwie)."""
+    if not os.path.exists(path):
+        return dict(DEFAULT_STAGE2)
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            cfg = json.load(f)
+    except (json.JSONDecodeError, OSError) as e:
+        raise ValueError(f"config.json: nie można wczytać: {e}")
+
+    st = cfg.get("stage2")
+    if st is None:
+        return dict(DEFAULT_STAGE2)
+    if not isinstance(st, dict):
+        raise ValueError("config.json: sekcja 'stage2' musi być obiektem")
+
+    engine = st.get("engine", "stub")
+    if engine not in _STAGE2_ENGINES:
+        raise ValueError(
+            f"config.json: stage2.engine musi być jednym z {_STAGE2_ENGINES}, jest {engine!r}"
+        )
+
+    if engine in _STAGE2_REQUIRED:
+        sub = st.get(engine)
+        if not isinstance(sub, dict):
+            raise ValueError(
+                f"config.json: stage2.engine={engine!r} wymaga sekcji 'stage2.{engine}' (obiekt)"
+            )
+        missing = [k for k in _STAGE2_REQUIRED[engine] if not sub.get(k)]
+        if missing:
+            raise ValueError(
+                f"config.json: stage2.{engine} — brakujące/puste klucze: {missing}"
+            )
+
+    return st
+
+
 def _main():
     """CLI: wypisz progi aktywnego/wskazanego profilu (diagnostyka). --profile <nazwa>."""
     profile = None

@@ -49,7 +49,10 @@ if _THIS_DIR not in sys.path:
 
 import metrics  # noqa: E402  (review_paragraphs_for_file — jedno źródło prawdy selekcji)
 import decision_log  # noqa: E402  (E3: wspólny strumień JSONL z D4 — append_decision/read_decisions)
-from engines import JudgeEngine, ReviewSegment, StubJudgeEngine  # noqa: E402
+import config  # noqa: E402  (KAN-218: load_stage2 — wybór silnika Stage 2 z configu)
+from engines import (  # noqa: E402
+    JudgeEngine, ReviewSegment, StubJudgeEngine, OpenAICompatEngine, OllamaEngine,
+)
 
 # Wartość pola `kind` dla wpisów instrumentacji E3 (odróżnia je od wpisów D4 accept/reject).
 STAGE2_KIND = "stage2_run"
@@ -218,6 +221,44 @@ def run_stage2(manifest, engine: JudgeEngine = None, file_reader=metrics._defaul
     }
 
 
+def build_engine_from_config(name=None, config_path=config.CONFIG_PATH):
+    """Buduje instancję silnika Stage 2 z konfiguracji (KAN-218).
+
+    `name` (jeśli podane) nadpisuje `stage2.engine` z configu — pozwala wymusić silnik z CLI.
+    `name=None` → użyj `engine` z `config.load_stage2` (fallback: "stub", gdy brak sekcji/configu).
+
+    Mapowanie:
+      stub   → StubJudgeEngine() (domyślny, zero-dep, bez sieci),
+      openai → OpenAICompatEngine z `stage2.openai` (base_url/model/api_key_env/extra_headers),
+      ollama → OllamaEngine z `stage2.ollama` (host/model).
+
+    Klucz API NIE jest tu czytany — robi to konstruktor silnika z os.environ (separacja:
+    config = co, ENV = sekret). Realny silnik zadziała tylko z siecią; to świadomy wybór
+    operatora, nie ścieżka testowa."""
+    cfg = config.load_stage2(config_path)
+    engine = name or cfg.get("engine", "stub")
+
+    if engine == "stub":
+        return StubJudgeEngine()
+    if engine == "openai":
+        o = cfg.get("openai", {})
+        if not o.get("base_url") or not o.get("model"):
+            raise ValueError("stage2.openai wymaga base_url i model (uzupełnij config.json)")
+        return OpenAICompatEngine(
+            base_url=o["base_url"], model=o["model"],
+            api_key_env=o.get("api_key_env", "OPENROUTER_API_KEY"),
+            extra_headers=o.get("extra_headers"),
+        )
+    if engine == "ollama":
+        o = cfg.get("ollama", {})
+        if not o.get("model"):
+            raise ValueError("stage2.ollama wymaga model (uzupełnij config.json)")
+        return OllamaEngine(
+            host=o.get("host", "http://localhost:11434"), model=o["model"],
+        )
+    raise ValueError(f"nieznany silnik Stage 2: {engine!r} (dozwolone: stub, openai, ollama)")
+
+
 def _load_manifest(path):
     """Wczytuje manifest z pliku JSON; '-' = stdin."""
     if path == "-":
@@ -235,12 +276,15 @@ def _main(argv=None):
         description="Runner Stage 2: osąd modelu na segmentach review z manifestu (G1)."
     )
     ap.add_argument("--manifest", required=True, help="Ścieżka do manifestu JSON ('-' = stdin).")
-    ap.add_argument("--engine", default="stub", choices=("stub",),
-                    help="Silnik osądu (domyślnie atrapa 'stub'; realne silniki wpinają się w kodzie).")
+    ap.add_argument("--engine", default=None, choices=("stub", "openai", "ollama"),
+                    help="Silnik osądu. Domyślnie czytany z config.json (sekcja stage2; fallback "
+                         "'stub'). 'openai'/'ollama' wymagają sieci — świadomy wybór operatora.")
+    ap.add_argument("--config", default=config.CONFIG_PATH,
+                    help="Ścieżka do config.json (sekcja stage2). Domyślnie config repo.")
     args = ap.parse_args(argv)
 
     manifest = _load_manifest(args.manifest)
-    engine = StubJudgeEngine()  # jedyny zero-dep silnik dostępny z CLI
+    engine = build_engine_from_config(name=args.engine, config_path=args.config)
     result = run_stage2(manifest, engine=engine)
 
     print(f"Stage 2 (silnik: {result['engine']}): osądzono {result['judged']} segmentów review "

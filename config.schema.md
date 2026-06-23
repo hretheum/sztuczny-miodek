@@ -62,6 +62,36 @@ więc `load_thresholds` (D1) zostaje nietknięty.
 - Konsument: `metrics.economy_health` i CLI `tools/measure_health.py` (exit 1 na `ALARM`).
   Odniesienie autora: `routed_ratio` ~4–5%; `0.10` = ~2x norma = sygnał regresji reguł.
 
+## Sekcja `stage2` (wybór silnika osądu, KAN-218)
+
+Rodzeństwo `economy`. Wskazuje, którym silnikiem osądzać Stage 2. Czytana osobną funkcją
+`config.load_stage2(path)`, więc `load_thresholds` (D1) i `load_economy` (E4) zostają nietknięte.
+
+```json
+"stage2": {
+  "engine": "stub",
+  "openai": { "base_url": "https://openrouter.ai/api/v1", "model": "...",
+              "api_key_env": "OPENROUTER_API_KEY", "extra_headers": {} },
+  "ollama": { "host": "http://localhost:11434", "model": "bielik" }
+}
+```
+
+| Klucz | Typ | Znaczenie |
+|---|---|---|
+| `engine` | `stub`\|`openai`\|`ollama` | aktywny silnik osądu |
+| `openai.base_url`, `openai.model` | string | wymagane gdy `engine="openai"` |
+| `openai.api_key_env` | string | nazwa ENV z kluczem (sekret NIGDY w pliku) |
+| `openai.extra_headers` | obiekt | dodatkowe nagłówki (np. OpenRouter `HTTP-Referer`) |
+| `ollama.host`, `ollama.model` | string | wymagane gdy `engine="ollama"` |
+
+- Brak sekcji `stage2` lub brak configu → `{"engine": "stub"}` (zero zmiany zachowania, zero sieci).
+- Walidacja: `engine` z dozwolonych; dla aktywnego realnego silnika wymagany podsłownik z kluczami
+  (openai: `base_url`+`model`; ollama: `host`+`model`). Brak → `ValueError`. Sekcje nieaktywnych
+  silników nie są walidowane.
+- Klucz API czytany WYŁĄCZNIE z ENV (przez `api_key_env`) w konstruktorze silnika, nigdy z pliku.
+- Konsument: `runner.build_engine_from_config` (CLI `runner.py --engine ... --config ...`).
+  Kontrakt adapterów: `engines.schema.md`.
+
 ## Styk z resztą systemu
 
 - **B3 (kalibracja progów)**: metodyka z `docs/THRESHOLD-CALIBRATION.md` zakłada, że kalibracja na

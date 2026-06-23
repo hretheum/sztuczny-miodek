@@ -40,5 +40,19 @@
     "opis": "Próg alarmu zdrowia ekonomii (E4). Alarm gdy routed_ratio z E1 > routed_ratio_alarm. Ref. autora 4-5%; 0.10 = ~2x norma = sygnał regresji. min_words: poniżej tylu słów łącznie nie alarmuj (za mała próbka).",
     "routed_ratio_alarm": 0.10,
     "min_words": 200
+  },
+  "stage2": {
+    "opis": "Wybór silnika osądu Stage 2 (KAN-218). engine: stub|openai|ollama. Brak sekcji => stub (zero kosztu, zero sieci). Klucze API czytane z ENV (api_key_env), NIGDY z pliku. Sekcje openai/ollama to parametry; aktywny jest ten wskazany przez engine.",
+    "engine": "stub",
+    "openai": {
+      "base_url": "https://openrouter.ai/api/v1",
+      "model": "openrouter/auto",
+      "api_key_env": "OPENROUTER_API_KEY",
+      "extra_headers": {}
+    },
+    "ollama": {
+      "host": "http://localhost:11434",
+      "model": "bielik"
+    }
   }
 }

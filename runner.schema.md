@@ -98,3 +98,12 @@ punkcie `_emit_stage2_run`). `log_path=None` (domyślnie) = brak zapisu, zachowa
 
 Realny silnik (Bielik przez Ollama, API przez OpenRouter) wpina się przez `engines.JudgeEngine` bez
 zmian w instrumentacji — logowanie działa dla każdego silnika (atrybucja po `engine.name`).
+
+## Wybór silnika z configu (KAN-218)
+
+Realne adaptery (`OpenAICompatEngine`, `OllamaEngine`) i ich kontrakt opisuje `engines.schema.md`.
+Runner wybiera silnik fabryką `build_engine_from_config(name=None, config_path=...)`: `name=None` →
+`stage2.engine` z `config.json` (fallback `stub`); `name` (CLI `--engine`) nadpisuje. CLI:
+`runner.py --manifest plik.json [--engine stub|openai|ollama] [--config config.json]`. Domyślnie
+atrapa — realne silniki wybierane jawnie i wymagają sieci. `run_stage2` bez zmian (dostaje gotowy
+silnik).

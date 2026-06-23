@@ -121,6 +121,13 @@ else
   echo "FAIL runner Stage 2 — selekcja/bramka/atrapa (G1) lub log stage2_run we wspólnym strumieniu z D4 (E3) rozjechał się (patrz wyżej)"; fail=1
 fi
 
+echo "== Adaptery Stage 2: OpenAICompat + Ollama, parsowanie/fallback, load_stage2 (KAN-218) =="
+if python3 "$DIR/../tools/check_engines.py"; then
+  : # OK — komunikat wypisuje sam skrypt
+else
+  echo "FAIL adaptery Stage 2 — mapowanie odpowiedzi na Judgement, fallback rewrite, atrybucja name, config stage2 lub fabryka silnika rozjechały się (patrz wyżej)"; fail=1
+fi
+
 echo "== Bramka write-time: blokuje tylko twarde blokery, sama gęstość NIE (F1) =="
 if python3 "$DIR/../tools/check_write_gate.py"; then
   : # OK — komunikat wypisuje sam skrypt
