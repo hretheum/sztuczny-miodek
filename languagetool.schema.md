@@ -16,7 +16,7 @@ realne API LanguageTool jest wołane TYLKO przy faktycznym uruchomieniu CLI prze
 ## Endpoint
 
 Endpoint rozstrzyga `resolve_endpoint` wg priorytetu: jawny argument > zmienna środowiskowa
-`LANGUAGETOOL_ENDPOINT` > publiczny serwer (`PUBLIC_ENDPOINT = "https://api.languagetool.org/v2/check"`,
+`LANGUAGETOOL_ENDPOINT`. BRAK domyślnego (KAN-225): bez wyboru `resolve_endpoint` podnosi `LanguageToolNotConfigured` (`PUBLIC_ENDPOINT = "https://api.languagetool.org/v2/check"` to jedna z dwóch jawnych dróg,
 stała `DEFAULT_ENDPOINT` to jego alias zgodności wstecznej). Operator może wskazać lokalny serwer (np.
 `http://localhost:8081/v2/check`), żeby nie wysyłać tekstu na zewnątrz: przez zmienną środowiskową
 (`LANGUAGETOOL_ENDPOINT=...`) albo jednorazowo flagą CLI `--endpoint`. Zmienna jest czytana przy każdym

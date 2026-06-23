@@ -15,7 +15,7 @@ Użycie:
 
 Realne API LanguageTool jest wołane TYLKO przy faktycznym uruchomieniu (transport nie jest
 wystawiony w CLI — produkcyjnie zawsze _default_http_transport). Endpoint rozstrzyga priorytet:
---endpoint > zmienna LANGUAGETOOL_ENDPOINT > publiczny api.languagetool.org.
+--endpoint > zmienna LANGUAGETOOL_ENDPOINT. Bez wyboru: błąd (KAN-225), nic nie wysyła.
 """
 
 import argparse
@@ -57,7 +57,7 @@ def main(argv=None):
     ap.add_argument("--language", default="pl-PL", help="Kod języka (domyślnie pl-PL).")
     ap.add_argument("--endpoint", default=None,
                     help="Endpoint LanguageTool (publiczny lub lokalny serwer). Pierwszeństwo: "
-                         f"--endpoint > zmienna LANGUAGETOOL_ENDPOINT > publiczny "
+                         f"--endpoint > zmienna LANGUAGETOOL_ENDPOINT (bez domyślnego, wymaga wyboru) "
                          f"({languagetool.PUBLIC_ENDPOINT}).")
     ap.add_argument("--json", action="store_true", help="Wypisz surowe sugestie jako JSON.")
     args = ap.parse_args(argv)

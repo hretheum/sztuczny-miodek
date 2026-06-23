@@ -32,26 +32,37 @@ import urllib.parse
 from dataclasses import dataclass, field
 from typing import List, Optional
 
-# Publiczny serwer LanguageTool — fallback, gdy operator nie wskaże własnego.
+# Publiczny serwer LanguageTool — JEDNA z dwóch jawnych dróg (operator wybiera świadomie).
+# NIE jest domyślnym fallbackiem: bez jawnego wyboru G4 nie wysyła tekstu nigdzie (KAN-225).
 PUBLIC_ENDPOINT = "https://api.languagetool.org/v2/check"
 
 # Zmienna środowiskowa wybierająca endpoint (np. lokalny serwer na localhost:8081/v2/check,
 # żeby nie wysyłać tekstu na zewnątrz). Czytana PRZY WYWOŁANIU (resolve_endpoint), nie przy imporcie.
 ENDPOINT_ENV_VAR = "LANGUAGETOOL_ENDPOINT"
 
-# Alias zgodności wstecznej. UWAGA: rzeczywisty domyślny endpoint rozstrzyga resolve_endpoint
-# (jawny argument > LANGUAGETOOL_ENDPOINT > publiczny), więc ta stała to tylko publiczny fallback.
-DEFAULT_ENDPOINT = PUBLIC_ENDPOINT
+
+class LanguageToolNotConfigured(RuntimeError):
+    """Brak skonfigurowanego endpointu LanguageTool (ani flaga, ani zmienna środowiskowa)."""
 
 
 def resolve_endpoint(explicit: Optional[str] = None) -> str:
-    """Rozstrzyga endpoint wg priorytetu: jawny argument > LANGUAGETOOL_ENDPOINT > publiczny.
+    """Rozstrzyga endpoint wg priorytetu: jawny argument > LANGUAGETOOL_ENDPOINT.
 
-    Zmienna środowiskowa czytana tutaj (przy wywołaniu), więc ustawienie jej w środowisku
-    operatora przekierowuje G4 na lokalny serwer bez zmiany kodu czy argumentów."""
+    BRAK DOMYŚLNEGO ENDPOINTU (KAN-225): jeśli ani flaga, ani zmienna LANGUAGETOOL_ENDPOINT nie są
+    ustawione, podnosi LanguageToolNotConfigured. To świadoma decyzja prywatności — G4 nie wysyła
+    tekstu nigdzie bez jawnego wyboru operatora: albo publiczne API (wysyła na cudze serwery),
+    albo lokalny serwer (tekst zostaje u operatora). Zmienna czytana przy każdym wywołaniu."""
     if explicit:
         return explicit
-    return os.environ.get(ENDPOINT_ENV_VAR) or PUBLIC_ENDPOINT
+    env = os.environ.get(ENDPOINT_ENV_VAR)
+    if env:
+        return env
+    raise LanguageToolNotConfigured(
+        f"Brak endpointu LanguageTool — wybierz świadomie jedną drogę (KAN-225):\n"
+        f"  publiczne API:  export {ENDPOINT_ENV_VAR}={PUBLIC_ENDPOINT}  (wysyła tekst na cudze serwery)\n"
+        f"  lokalny serwer: export {ENDPOINT_ENV_VAR}=http://localhost:8081/v2/check  (tekst zostaje u Ciebie)\n"
+        f"albo podaj --endpoint. Wzór: .env.example."
+    )
 
 # Wspólny User-Agent (część serwerów / proxy odrzuca domyślny Python-urllib).
 USER_AGENT = "sztuczny-miodek/1.0"

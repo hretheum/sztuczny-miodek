@@ -117,13 +117,14 @@ def main():
     if not cap.get("headers", {}).get("User-Agent"):
         fails.append("2) brak nagłówka User-Agent")
 
-    # potwierdzenie: bez jawnego endpointu i bez zmiennej środowiskowej → publiczny serwer
+    # KAN-225: bez jawnego endpointu i bez zmiennej środowiskowej → BŁĄD (brak domyślnego, świadomy wybór).
     _saved_env = os.environ.pop(languagetool.ENDPOINT_ENV_VAR, None)
     try:
-        cap2 = {}
-        languagetool.check_text("x", transport=_capturing_transport(cap2, "{}"))
-        if cap2.get("url") != languagetool.PUBLIC_ENDPOINT:
-            fails.append(f"2) domyślny endpoint: oczekiwano {languagetool.PUBLIC_ENDPOINT!r}, jest {cap2.get('url')!r}")
+        try:
+            languagetool.check_text("x", transport=_capturing_transport({}, "{}"))
+            fails.append("2) brak endpointu: oczekiwano LanguageToolNotConfigured, nie podniesiono")
+        except languagetool.LanguageToolNotConfigured:
+            pass  # poprawnie: bez konfiguracji nie wysyła tekstu nigdzie
 
         # zmienna środowiskowa LANGUAGETOOL_ENDPOINT przekierowuje na lokalny serwer
         os.environ[languagetool.ENDPOINT_ENV_VAR] = "http://localhost:8081/v2/check"

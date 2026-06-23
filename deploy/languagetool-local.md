@@ -4,14 +4,14 @@ G4 to opcjonalny dostawca pełnej korekty polszczyzny (ortografia, gramatyka, in
 
 ## Wybór endpointu (klient)
 
-`resolve_endpoint()` rozstrzyga z priorytetem: flaga `--endpoint` przed zmienną `LANGUAGETOOL_ENDPOINT` przed publicznym `api.languagetool.org`. Zmienna jest czytana przy każdym wywołaniu. Żeby kierować G4 na lokalny serwer bez wysyłki na zewnątrz:
+`resolve_endpoint()` rozstrzyga z priorytetem: flaga `--endpoint` przed zmienną `LANGUAGETOOL_ENDPOINT`. Domyślnego endpointu NIE ma (KAN-225): bez wyboru zgłasza błąd, więc nie wysyła tekstu nigdzie. Zmienna jest czytana przy każdym wywołaniu. Żeby kierować G4 na lokalny serwer bez wysyłki na zewnątrz:
 
 ```bash
 export LANGUAGETOOL_ENDPOINT=http://localhost:8081/v2/check
 python3 tools/languagetool_check.py --file tekst.md
 ```
 
-Bez tej zmiennej i bez flagi klient celuje w publiczne API, czyli wysyła tekst na cudze serwery. To świadoma decyzja operatora.
+Bez tej zmiennej i bez flagi klient zgłasza błąd i prosi o wybór jednej z dwóch dróg (KAN-225). Nie wysyła tekstu nigdzie domyślnie.
 
 ## Serwer lokalny (macOS, Homebrew)
 
