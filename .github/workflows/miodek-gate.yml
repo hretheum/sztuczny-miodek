@@ -1,0 +1,33 @@
+name: miodek-gate
+# Bramka jakości na merge request (F2): linter na ZMIENIONYCH plikach prozy.
+# Pełny werdykt (FAIL/FAIL-HARD = blokery LUB gęstość ponad próg), nie hard-only.
+# FAIL-uje wyłącznie na zmienionej prozie, nigdy na zastanym długu w nietkniętych plikach.
+
+on:
+  pull_request:
+    paths:            # workflow rusza tylko gdy PR tyka prozy
+      - '**.md'
+      - '**.txt'
+
+permissions:
+  contents: read      # minimalny zakres
+
+jobs:
+  bramka-jakosci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0          # pełna historia → merge-base bazy PR osiągalny dla diffa base...HEAD
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Bramka lintera na zmienionych plikach prozy
+        env:
+          BASE_REF: ${{ github.base_ref }}   # nazwa gałęzi bazowej przez env (nie interpolacja w run:)
+        run: |
+          # Upewnij się, że ref bazy PR istnieje lokalnie (checkout daje HEAD merge).
+          git fetch --no-tags --depth=1 origin "$BASE_REF"
+          python3 tools/ci_gate.py --changed --base "origin/$BASE_REF" --head HEAD

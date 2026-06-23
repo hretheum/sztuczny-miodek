@@ -128,6 +128,13 @@ else
   echo "FAIL bramka write-time — gate_decision blokuje gęstość zamiast tylko twardych blokerów, albo opt-in/smoke rozjechał się (patrz wyżej)"; fail=1
 fi
 
+echo "== Bramka CI na MR: pełny werdykt na zmienionych plikach prozy (F2) =="
+if python3 "$DIR/../tools/check_ci_gate.py"; then
+  : # OK — komunikat wypisuje sam skrypt
+else
+  echo "FAIL bramka CI — ci_gate przepuścił FAIL/gęstość, wywrócił się na braku plików prozy albo workflow zgubił krytyczne pola (patrz wyżej)"; fail=1
+fi
+
 if [[ $fail -eq 0 ]]; then
   echo "WSZYSTKIE TESTY PRZESZŁY."
 else

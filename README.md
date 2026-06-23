@@ -125,6 +125,37 @@ hooks/miodek_write_gate.py plik.md notatka.txt
 
 W roli `pre-commit` zatrzyma commit, gdy któryś plik prozy ma twardy bloker. Bezpieczeństwo: każda własna awaria bramki (brak pliku, błąd lintera, niepoprawny manifest) przepuszcza zapis (fail-open). Kontrakt pełny w `hooks/miodek_write_gate.schema.md`.
 
+## Bramka CI na merge request (F2)
+
+Druga bramka działa na pull requeście, nie przy zapisie. Workflow `.github/workflows/miodek-gate.yml` (GitHub Actions, trigger `pull_request`) liczy pliki prozy (`.md`/`.txt`) ZMIENIONE w PR względem bazy, woła na nich `ai_linter.py` i FAIL-uje check przy PEŁNYM werdykcie. Sterownik to `tools/ci_gate.py` (zero zależności, czysta biblioteka standardowa plus git).
+
+Kluczowa różnica wobec write-time. Bramka CI zatrzymuje cały pełny werdykt, czyli `FAIL` oraz `FAIL-HARD`, a więc także samą gęstość ponad próg, nie tylko twarde blokery. To odwrotna polityka niż write-time, która gęstość przepuszcza. Z tabeli trzech bramek (sekcja wyżej) bierze wiersz „CI": pełny werdykt, łapie też samą gęstość. Trzecia bramka, przed publikacją (osąd modelu Stage 2), jeszcze nie istnieje.
+
+| Bramka | Polityka | Zakres |
+|---|---|---|
+| write-time (F1) | tylko twarde blokery, gęstość przechodzi | zapisywany plik, opt-in (`MIODEK_WRITE_GATE=1`) |
+| CI na MR (F2) | pełny werdykt FAIL/FAIL-HARD, w tym sama gęstość | pliki prozy zmienione w PR względem bazy |
+| przed publikacją (F3) | pełny werdykt plus osąd modelu | jeszcze nie ma |
+
+Zakres ograniczony do zmienionych plików jest celowy. Bramka FAIL-uje wyłącznie na prozie tkniętej w PR, nigdy na zastanym długu w plikach nieruszanych. Diff liczony jest symetrycznie od wspólnego przodka (`base...HEAD`, trzy kropki), kanon recenzji PR. Plik bez żadnej zmienionej prozy daje zielony check (exit 0), nie błąd.
+
+Kody wyjścia `ci_gate.py` (równe kodom lintera):
+
+| Exit | Znaczenie |
+|---|---|
+| 0 | brak zmienionych plików prozy LUB wszystkie PASS |
+| 1 | którykolwiek zmieniony plik FAIL/FAIL-HARD (blokery lub gęstość) |
+| 2 | błąd reguł/konfiguracji lintera lub błąd git/środowiska (bramka jakości nie zazielenia się po cichu) |
+
+Użycie ręczne i w self-teście (jawne ścieżki):
+
+```bash
+python3 tools/ci_gate.py plik.md notatka.txt        # exit 1 przy pełnym werdykcie FAIL
+python3 tools/ci_gate.py --changed --base origin/main   # tryb CI: diff względem bazy
+```
+
+W przeciwieństwie do write-time bramka CI nie jest fail-open: błąd reguł lub konfiguracji lintera kończy check niezerowo, bo to bramka jakości przed mergem. Self-test rdzenia: `tools/check_ci_gate.py` (wpięty do `tests/run_tests.sh`).
+
 ## Testy
 
 Katalog `tests/` zawiera zestaw regresyjny:
