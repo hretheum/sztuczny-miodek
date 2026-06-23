@@ -14,11 +14,20 @@ Działa na zaszytym mini-manifeście i treści podanej W PAMIĘCI (wstrzyknięty
   6. spójność z E1: zbiór segmentów runnera == akapity routed liczone przez metrics
      (jedno źródło prawdy „co idzie do Stage 2").
 
+Instrumentacja E3 (wspólny strumień JSONL z D4):
+  7. run_stage2 z log_path dopisuje wpisy kind="stage2_run" do logu (per trafienie review),
+     read_stage2_runs zwraca tylko te wpisy, z poprawnym mapowaniem (verdict rewrite→reject,
+     id/fragment/engine/stage2_verdict/ts) i stałym ts ze wstrzykniętego ts_provider,
+  8. wpisy E3 współistnieją z ręcznym wpisem D4 w jednym logu: read_decisions widzi oba,
+     a filtr po kind rozdziela strumienie bez kolizji (D4 bez kind, E3 z kind="stage2_run"),
+  9. bez log_path (None) run_stage2 NIC nie dopisuje (zachowanie G1 nietknięte).
+
 Exit 1 na rozjeździe (gate w run_tests.sh).
 """
 
 import os
 import sys
+import tempfile
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if REPO_ROOT not in sys.path:
@@ -26,6 +35,7 @@ if REPO_ROOT not in sys.path:
 
 import metrics      # noqa: E402
 import runner       # noqa: E402
+import decision_log  # noqa: E402
 from engines import StubJudgeEngine, ReviewSegment, Judgement  # noqa: E402
 
 
@@ -120,13 +130,70 @@ def main():
     except ValueError:
         pass
 
+    # --- 7+8+9: instrumentacja E3 — wspólny strumień JSONL z D4 ---
+    FIXED_TS = "2026-06-23T12:00:00Z"
+    with tempfile.TemporaryDirectory() as tmp:
+        log = os.path.join(tmp, "decisions.jsonl")
+
+        # 8: najpierw ręczny wpis D4 (bez pola kind) — symuluje istniejący log operatora.
+        decision_log.append_decision(
+            {"ts": "2026-06-23T09:00:00Z", "verdict": "reject", "id": "EN-CLICHE",
+             "fragment": "robust", "klasa": "review"},
+            path=log,
+        )
+
+        # 7: run_stage2 z log_path + stały ts_provider → dopisanie wpisów stage2_run.
+        res_log = runner.run_stage2(
+            MANIFEST_REVIEW, engine=StubJudgeEngine(), file_reader=_reader_ok,
+            log_path=log, ts_provider=lambda: FIXED_TS,
+        )
+        if res_log["gate"] != "FAIL":
+            fails.append(f"E3 run_stage2 z log: gate oczekiwano FAIL, jest {res_log['gate']!r}")
+
+        runs = runner.read_stage2_runs(log)
+        # MANIFEST_REVIEW ma 1 segment review z 1 trafieniem (PL-SIGN) → dokładnie 1 wpis E3.
+        if len(runs) != 1:
+            fails.append(f"E3 read_stage2_runs: oczekiwano 1 wpisu stage2_run, jest {len(runs)}")
+        else:
+            r = runs[0]
+            if r.get("kind") != "stage2_run":
+                fails.append(f"E3 wpis: kind oczekiwano 'stage2_run', jest {r.get('kind')!r}")
+            if r.get("verdict") != "reject":
+                fails.append(f"E3 mapowanie verdict: rewrite→reject, jest {r.get('verdict')!r}")
+            if r.get("stage2_verdict") != "rewrite":
+                fails.append(f"E3 stage2_verdict: oczekiwano 'rewrite', jest {r.get('stage2_verdict')!r}")
+            if r.get("id") != "PL-SIGN":
+                fails.append(f"E3 id: oczekiwano 'PL-SIGN', jest {r.get('id')!r}")
+            if r.get("fragment") != "review":
+                fails.append(f"E3 fragment (=match): oczekiwano 'review', jest {r.get('fragment')!r}")
+            if r.get("engine") != "stub":
+                fails.append(f"E3 engine: oczekiwano 'stub', jest {r.get('engine')!r}")
+            if r.get("ts") != FIXED_TS:
+                fails.append(f"E3 ts (ze wstrzykniętego ts_provider): oczekiwano {FIXED_TS!r}, jest {r.get('ts')!r}")
+
+        # 8: oba strumienie w jednym logu — read_decisions widzi D4 + E3, filtr po kind rozdziela.
+        all_entries = decision_log.read_decisions(log)
+        if len(all_entries) != 2:
+            fails.append(f"E3 wspólny strumień: oczekiwano 2 wpisów łącznie (D4+E3), jest {len(all_entries)}")
+        d4_only = [w for w in all_entries if w.get("kind") is None]
+        if len(d4_only) != 1 or d4_only[0].get("id") != "EN-CLICHE":
+            fails.append(f"E3 filtr: wpis D4 (bez kind) zgubiony lub zniekształcony: {d4_only}")
+
+        # 9: bez log_path nic nie dopisuje do logu (zachowanie G1 nietknięte).
+        before = len(decision_log.read_decisions(log))
+        runner.run_stage2(MANIFEST_REVIEW, engine=StubJudgeEngine(), file_reader=_reader_ok)
+        after = len(decision_log.read_decisions(log))
+        if before != after:
+            fails.append(f"E3 bez log_path: log nie powinien rosnąć ({before} → {after})")
+
     if fails:
         for f in fails:
             print(f"  [FAIL] {f}", file=sys.stderr)
         sys.exit(1)
 
-    print("OK   runner Stage 2 (G1): selekcja=tylko review (block+czysty pominięte), "
-          "bramka FAIL na rewrite / PASS na czystym, atrapa deterministyczna, spójność z E1.")
+    print("OK   runner Stage 2 (G1/E3): selekcja=tylko review (block+czysty pominięte), "
+          "bramka FAIL na rewrite / PASS na czystym, atrapa deterministyczna, spójność z E1; "
+          "instrumentacja E3: wpisy stage2_run we wspólnym strumieniu JSONL z D4 (filtr po kind).")
 
 
 if __name__ == "__main__":

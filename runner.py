@@ -25,6 +25,18 @@ ROZSZERZALNOŚĆ (E2/E3): API zaprojektowane tak, by dołożyć instrumentację 
 osądu do strumienia decyzji) i atrybucję (E2) BEZ przeróbki rdzenia. Parametry-haki `log_path`
 i `ts_provider` są przyjmowane już teraz; ich obsługę (zapis JSONL) dokłada E3 w jednym miejscu
 (`_emit_stage2_run`), nie ruszając selekcji ani bramki.
+
+INSTRUMENTACJA E3 (wspólny strumień z D4): gdy `run_stage2` dostanie `log_path`, każdy osąd Stage 2
+dopisuje się do TEGO SAMEGO logu JSONL co ręczne decyzje operatora (D4, `decision_log.py`). Wpisy
+rozróżnia nowe pole `kind`: brak `kind` lub `"decision"` to wpis D4 (accept/reject), `"stage2_run"`
+to automatyczny osąd Stage 2. Wstecznie zgodne: istniejące wpisy D4 nie mają `kind`, a walidacja D4
+(`_REQUIRED = ts/verdict/id/fragment`) zostaje nietknięta. Mapowanie osądu na wymagane pola D4:
+`verdict` = `pass`→`accept`, `rewrite`→`reject` (reject = „trafienie słuszne, do poprawy"),
+`id` = ID trafienia, `fragment` = `match`. Pola `engine`, `stage2_verdict`, `stage2_notes`, `kind`,
+`klasa`, `file`, `line` są dodatkowe (D4 ignoruje nieznane pola). Tym samym log decyzji staje się
+wspólnym strumieniem audytu: ręczne decyzje (D4) i automatyczne osądy (E3) w jednym JSONL,
+filtrowane po `kind`. Jeden wpis = jedno trafienie review w segmencie (segment z N trafieniami daje
+N wpisów — atrybucja per reguła jest wtedy ziarnista).
 """
 
 import json
@@ -36,7 +48,16 @@ if _THIS_DIR not in sys.path:
     sys.path.insert(0, _THIS_DIR)
 
 import metrics  # noqa: E402  (review_paragraphs_for_file — jedno źródło prawdy selekcji)
+import decision_log  # noqa: E402  (E3: wspólny strumień JSONL z D4 — append_decision/read_decisions)
 from engines import JudgeEngine, ReviewSegment, StubJudgeEngine  # noqa: E402
+
+# Wartość pola `kind` dla wpisów instrumentacji E3 (odróżnia je od wpisów D4 accept/reject).
+STAGE2_KIND = "stage2_run"
+
+# Mapowanie werdyktu Stage 2 (pass/rewrite) na werdykt D4 (accept/reject), by wpis przeszedł
+# walidację decision_log (_REQUIRED zawiera verdict ∈ {accept, reject}). Sens: rewrite = trafienie
+# słuszne wymagające ruchu = reject (false-positive odwrotnie: pass = trafienie do zaakceptowania).
+_VERDICT_MAP = {"pass": "accept", "rewrite": "reject"}
 
 
 def select_review_segments(manifest, file_reader=metrics._default_file_reader):
@@ -85,14 +106,49 @@ def select_review_segments(manifest, file_reader=metrics._default_file_reader):
     return segments
 
 
-def _emit_stage2_run(judgement, segment, hit, log_path, ts_provider):
-    """Hak instrumentacji E3 (zapis pojedynczego osądu do strumienia decyzji).
+def _default_ts_provider():
+    """Domyślny dostawca znacznika czasu: bieżąca chwila ISO 8601 UTC.
 
-    W G1 to NO-OP, dopóki `log_path` jest None. E3 podmienia implementację, by dopisywać wpis
-    `kind="stage2_run"` przez `decision_log.append_decision`. Sygnatura jest stała, więc E3 nie
-    rusza pętli `run_stage2`. Pozostawione tu świadomie jako pojedynczy punkt rozszerzenia.
-    """
-    return None
+    Wstrzykiwalny przez `ts_provider`, żeby test podał stały znacznik (determinizm) bez sięgania do
+    zegara. Produkcja używa tej funkcji domyślnie."""
+    from datetime import datetime, timezone
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _emit_stage2_run(judgement, segment, hit, log_path, ts_provider):
+    """Hak instrumentacji E3: zapis JEDNEGO osądu (per trafienie review) do strumienia decyzji.
+
+    Dopisuje wpis `kind="stage2_run"` przez `decision_log.append_decision` — TEN SAM append-only
+    JSONL co log decyzji D4. Reużywa warstwy zapisu D4 (nie duplikuje I/O plikowego). Sygnatura
+    jest stała, więc pętla `run_stage2` go tylko woła. NO-OP, dopóki `log_path` jest None
+    (wywoływane wyłącznie spod warunku w `run_stage2`).
+
+    Mapowanie na wymagane pola D4 (ts/verdict/id/fragment) plus pola dodatkowe (kind/engine/…)."""
+    ts = (ts_provider or _default_ts_provider)()
+    entry = {
+        "kind": STAGE2_KIND,
+        "ts": ts,
+        "verdict": _VERDICT_MAP.get(judgement.verdict, "reject"),
+        "id": hit.get("id"),
+        "fragment": hit.get("match", ""),
+        "klasa": hit.get("klasa", "review"),
+        "file": segment.file,
+        "line": hit.get("line", segment.line),
+        "engine": judgement.engine,
+        "stage2_verdict": judgement.verdict,
+        "stage2_notes": judgement.notes,
+    }
+    decision_log.append_decision(entry, log_path)
+    return entry
+
+
+def read_stage2_runs(log_path=decision_log.DEFAULT_LOG_PATH):
+    """Czyta ze wspólnego strumienia tylko wpisy instrumentacji E3 (`kind == "stage2_run"`).
+
+    Filtr po `kind` rozdziela strumienie bez kolizji: `decision_log.read_decisions` widzi wszystkie
+    wpisy (D4 + E3), a ta funkcja zwraca wyłącznie automatyczne osądy Stage 2. Wpisy D4 (bez pola
+    `kind`) są pomijane."""
+    return [w for w in decision_log.read_decisions(log_path) if w.get("kind") == STAGE2_KIND]
 
 
 def run_stage2(manifest, engine: JudgeEngine = None, file_reader=metrics._default_file_reader,
@@ -103,8 +159,11 @@ def run_stage2(manifest, engine: JudgeEngine = None, file_reader=metrics._defaul
         manifest    — dict {"hits":[...], "summary":[...]} (kontrakt między etapami).
         engine      — wymienialny JudgeEngine; domyślnie atrapa StubJudgeEngine().
         file_reader — wstrzykiwalny czytnik treści (testy podają treść w pamięci, bez I/O).
-        log_path    — (E3) ścieżka strumienia decyzji; w G1 nieużywana (hak rozszerzenia).
-        ts_provider — (E3) dostawca znacznika czasu; w G1 nieużywany (hak rozszerzenia).
+        log_path    — (E3) ścieżka wspólnego strumienia decyzji JSONL (D4 + E3). Gdy podana, każdy
+                      osąd dopisuje wpis kind="stage2_run" przez decision_log.append_decision.
+                      None (domyślnie) = bez instrumentacji (zachowanie G1 bez zmian).
+        ts_provider — (E3) dostawca znacznika czasu (callable bez argumentów → str ISO 8601 UTC).
+                      None = bieżąca chwila UTC. Test podaje stały znacznik (determinizm).
 
     Zwraca:
         {
@@ -141,7 +200,8 @@ def run_stage2(manifest, engine: JudgeEngine = None, file_reader=metrics._defaul
             "hit_ids": seg.hit_ids(),
         })
 
-        # Hak instrumentacji E3 (NO-OP w G1, dopóki log_path is None).
+        # Instrumentacja E3: gdy log_path podane, dopisz wpis stage2_run per trafienie review
+        # do wspólnego strumienia JSONL (D4 + E3). Bez log_path — zachowanie G1 bez zmian.
         if log_path is not None:
             for hit in seg.hits:
                 _emit_stage2_run(j, seg, hit, log_path, ts_provider)

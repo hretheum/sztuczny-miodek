@@ -55,6 +55,52 @@ python3 decision_log.py --verdict reject --id EN-CLICHE --fragment robust \
     --klasa review --file doc.md --line 12 --ts 2026-06-23T10:00:00Z
 ```
 
+## Rozróżnik typu wpisu: pole `kind` (wspólny strumień z E3)
+
+Log decyzji jest WSPÓLNYM strumieniem audytu dla dwóch źródeł, rozróżnianych polem `kind`:
+
+| `kind` | Źródło | Znaczenie |
+|---|---|---|
+| brak / `"decision"` | D4 (operator) | ręczna decyzja accept/reject (wpisy opisane wyżej) |
+| `"stage2_run"` | E3 (runner Stage 2) | automatyczny osąd modelu na segmencie review |
+
+Wstecznie zgodne: istniejące wpisy D4 NIE mają pola `kind`; czytelnik traktuje brak `kind` jak
+`"decision"`. Walidacja D4 (`_REQUIRED = ts/verdict/id/fragment`) zostaje nietknięta. Filtr po
+`kind` rozdziela strumienie bez kolizji (`runner.read_stage2_runs` zwraca tylko `kind=="stage2_run"`).
+
+## Wpis `stage2_run` (E3 — instrumentacja runnera Stage 2)
+
+Każde wywołanie silnika Stage 2 na trafieniu klasy `review` dopisuje JEDEN wpis przez tę samą
+warstwę zapisu (`decision_log.append_decision`, append-only JSONL). Wpis wypełnia wymagane pola D4
+(by przejść walidację) plus pola dodatkowe (D4 ignoruje nieznane pola).
+
+Mapowanie osądu Stage 2 (`pass`/`rewrite`) na werdykt D4 (`accept`/`reject`):
+
+- `pass` → `accept` (trafienie do zaakceptowania bez ruchu),
+- `rewrite` → `reject` (trafienie słuszne, wymaga poprawki).
+
+| Pole | Typ | Obow. | Znaczenie |
+|---|---|---|---|
+| `kind` | `"stage2_run"` | tak (E3) | rozróżnik typu wpisu |
+| `ts` | string | tak | znacznik czasu ISO 8601 UTC (z `ts_provider`; produkcja: bieżąca chwila UTC) |
+| `verdict` | `"accept"`\|`"reject"` | tak | werdykt D4 zmapowany z osądu (`pass`→`accept`, `rewrite`→`reject`) |
+| `id` | string | tak | ID trafienia review (np. `PL-SIGN`) |
+| `fragment` | string | tak | dopasowany fragment trafienia (`hit.match`) |
+| `klasa` | `"review"` | nie | klasa trafienia (zawsze `review` — block nie dociera do Stage 2) |
+| `file` | string | nie | plik źródłowy |
+| `line` | int | nie | linia trafienia |
+| `engine` | string | nie | nazwa silnika osądu (`JudgeEngine.name`, np. `stub`; atrybucja E2/E3) |
+| `stage2_verdict` | `"pass"`\|`"rewrite"` | nie | surowy werdykt Stage 2 (przed mapowaniem na D4) |
+| `stage2_notes` | string | nie | uzasadnienie / propozycja poprawki od silnika |
+
+Przykład wpisu `stage2_run`:
+```
+{"engine": "stub", "file": "doc.md", "fragment": "robust", "id": "EN-CLICHE", "kind": "stage2_run", "klasa": "review", "line": 12, "stage2_notes": "...", "stage2_verdict": "rewrite", "ts": "2026-06-23T12:00:00Z", "verdict": "reject"}
+```
+
+API odczytu: `runner.read_stage2_runs(log_path)` → tylko wpisy `kind=="stage2_run"`. Schemat
+runnera i bramki: `runner.schema.md`.
+
 ## Styk z resztą Epiku
 
 - **D3 (build-dict)**: terminy z `reject` (z `klasa`) → kandydaci do `allow`. `read_decisions`
@@ -63,3 +109,5 @@ python3 decision_log.py --verdict reject --id EN-CLICHE --fragment robust \
   (metodyka `docs/THRESHOLD-CALIBRATION.md`). D4 ODBLOKOWUJE pełną kalibrację, która w B3 była
   niewykonalna z braku logu.
 - **D1 (profile)**: pole `profile` wiąże decyzję z aktywnym profilem progów (kalibracja per profil).
+- **E3 (instrumentacja Stage 2)**: wpisy `kind="stage2_run"` w tym samym logu — automatyczne osądy
+  modelu obok ręcznych decyzji operatora. Jeden strumień audytu, dwa źródła, filtr po `kind`.

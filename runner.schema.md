@@ -80,10 +80,21 @@ Reguła bramki (surowa, „PASS z uwagami to NIE PASS"): `gate == "FAIL"`, gdy j
 `verdict == "rewrite"`. `gate == "PASS"` tylko gdy wszystkie osądy to `pass` lub brak segmentów
 review. CLI `runner.py --manifest plik.json` zwraca exit 1 przy `gate == "FAIL"` (gate-owalne w CI).
 
-## Rozszerzalność E2/E3 (bez przeróbki rdzenia)
+## Instrumentacja E3 (wspólny strumień JSONL z D4) — ZREALIZOWANE
 
-`run_stage2` przyjmuje już teraz haki `log_path` i `ts_provider`. W G1 są nieużywane (NO-OP). E3
-dokłada instrumentację w jednym punkcie (`_emit_stage2_run`): dla każdego osądu dopisuje wpis
-`kind="stage2_run"` do wspólnego strumienia decyzji (`decision_log.append_decision`), nie ruszając
-selekcji ani bramki. E2 (atrybucja) czyta `hit_ids` segmentów z wyniku. Schemat wpisu `stage2_run`
-dokumentuje E3 w `decision-log.schema.md`.
+`run_stage2` przyjmuje haki `log_path` i `ts_provider`. Gdy `log_path` jest podana, dla każdego
+trafienia review w osądzonym segmencie runner dopisuje wpis `kind="stage2_run"` przez
+`decision_log.append_decision` — TEN SAM append-only JSONL co log decyzji D4 (reużycie warstwy
+zapisu, brak duplikacji I/O). Selekcja i bramka pozostają nietknięte (instrumentacja w jednym
+punkcie `_emit_stage2_run`). `log_path=None` (domyślnie) = brak zapisu, zachowanie G1 bez zmian.
+
+- `ts_provider` — callable bez argumentów zwracający znacznik czasu (str ISO 8601 UTC). Domyślnie
+  bieżąca chwila UTC; test podaje stały znacznik (determinizm).
+- Mapowanie osądu na wpis: `verdict` D4 = `pass`→`accept`, `rewrite`→`reject`; `id`/`fragment` =
+  `hit.id`/`hit.match`; pola dodatkowe `engine`, `stage2_verdict`, `stage2_notes`, `klasa`, `file`,
+  `line`. Pełny schemat wpisu: `decision-log.schema.md` (sekcja „Wpis `stage2_run`").
+- Odczyt: `runner.read_stage2_runs(log_path)` → tylko wpisy `kind=="stage2_run"` (filtr rozdziela
+  strumień D4 + E3). E2 (atrybucja) czyta `hit_ids` segmentów z wyniku `run_stage2`.
+
+Realny silnik (Bielik przez Ollama, API przez OpenRouter) wpina się przez `engines.JudgeEngine` bez
+zmian w instrumentacji — logowanie działa dla każdego silnika (atrybucja po `engine.name`).
