@@ -98,6 +98,13 @@ else
   echo "FAIL adapter strukturalny — ekstrakcja prozy z HTML rozjechała się (patrz wyżej)"; fail=1
 fi
 
+echo "== Metryki: współczynnik redukcji z manifestu (E1) =="
+if python3 "$DIR/../tools/check_metrics.py"; then
+  : # OK — komunikat wypisuje sam skrypt
+else
+  echo "FAIL metryki — definicja/mapowanie redukcji (routed vs block vs czysty) rozjechał się (patrz wyżej)"; fail=1
+fi
+
 if [[ $fail -eq 0 ]]; then
   echo "WSZYSTKIE TESTY PRZESZŁY."
 else
