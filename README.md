@@ -93,6 +93,38 @@ plik | słowa | trafienia | em-dash/akapit(max) | gęstość/500 | blokery | WER
 
 PASS zapada tylko przy zerze blokerów i gęstości nie większej niż 8.
 
+## Bramka write-time (hook na zapisie pliku)
+
+Bramka write-time uruchamia linter przy każdym zapisie pliku prozy (`.md`/`.txt`) i zatrzymuje pracę WYŁĄCZNIE przy twardych blokerach. To inna bramka niż dwie pozostałe:
+
+| Bramka | Kiedy | Co zatrzymuje |
+|---|---|---|
+| write-time (ta) | przy zapisie pliku prozy (hook lub pre-commit) | tylko twarde blokery (klasa `block` lub `FAIL-HARD`) |
+| CI | przed mergem (`ai_linter.py`, exit 1) | pełny werdykt FAIL/FAIL-HARD, łapie też samą gęstość |
+| przed publikacją | przed wysyłką | pełny werdykt plus osąd modelu (Stage 2) |
+
+Niuans: sama wysoka gęstość trafień klasy `review` (czyli `verdict == FAIL` przy zerze blokerów) NIE zatrzymuje write-time, daje co najwyżej ostrzeżenie. Dzięki temu codzienna edycja nie jest przerywana z powodu gęstości, a twarde blokery (cyrylica, em-dash od trzech na akapit, emoji w nagłówku, serie antytez) zatrzymują pracę od razu.
+
+### Włączenie hooka w pluginie (opt-in)
+
+Plugin deklaruje hook `PostToolUse` na `Write|Edit|MultiEdit` w `hooks/hooks.json`, ale w trybie hooka jest on bierny do jawnego włączenia. Sama instalacja pluginu nie zaczyna nikomu blokować edycji. Aktywacja zmienną środowiskową:
+
+```bash
+export MIODEK_WRITE_GATE=1   # albo true / on / yes
+```
+
+Przy twardym blokerze hook zwraca decyzję `block` z powodem (lista blokerów: ID markera, numer linii, fragment), żeby agent wiedział, co poprawić. Bez ustawionej zmiennej hook kończy natychmiast bez działania.
+
+### Użycie jako git pre-commit
+
+Skrypt działa też z linii poleceń (bez zmiennej środowiskowej, bo jawne wywołanie to świadoma decyzja): bierze ścieżki z argumentów, kończy kodem 1 przy twardym blokerze.
+
+```bash
+hooks/miodek_write_gate.py plik.md notatka.txt
+```
+
+W roli `pre-commit` zatrzyma commit, gdy któryś plik prozy ma twardy bloker. Bezpieczeństwo: każda własna awaria bramki (brak pliku, błąd lintera, niepoprawny manifest) przepuszcza zapis (fail-open). Kontrakt pełny w `hooks/miodek_write_gate.schema.md`.
+
 ## Testy
 
 Katalog `tests/` zawiera zestaw regresyjny:

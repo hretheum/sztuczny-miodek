@@ -121,6 +121,13 @@ else
   echo "FAIL runner Stage 2 — selekcja/bramka/atrapa (G1) lub log stage2_run we wspólnym strumieniu z D4 (E3) rozjechał się (patrz wyżej)"; fail=1
 fi
 
+echo "== Bramka write-time: blokuje tylko twarde blokery, sama gęstość NIE (F1) =="
+if python3 "$DIR/../tools/check_write_gate.py"; then
+  : # OK — komunikat wypisuje sam skrypt
+else
+  echo "FAIL bramka write-time — gate_decision blokuje gęstość zamiast tylko twardych blokerów, albo opt-in/smoke rozjechał się (patrz wyżej)"; fail=1
+fi
+
 if [[ $fail -eq 0 ]]; then
   echo "WSZYSTKIE TESTY PRZESZŁY."
 else
