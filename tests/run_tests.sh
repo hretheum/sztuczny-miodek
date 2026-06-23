@@ -105,6 +105,13 @@ else
   echo "FAIL metryki — definicja/mapowanie redukcji (routed vs block vs czysty) rozjechał się (patrz wyżej)"; fail=1
 fi
 
+echo "== Runner Stage 2: selekcja review + atrapa silnika + bramka (G1) =="
+if python3 "$DIR/../tools/check_runner.py"; then
+  : # OK — komunikat wypisuje sam skrypt
+else
+  echo "FAIL runner Stage 2 — selekcja segmentów / bramka / atrapa silnika rozjechał się (patrz wyżej)"; fail=1
+fi
+
 if [[ $fail -eq 0 ]]; then
   echo "WSZYSTKIE TESTY PRZESZŁY."
 else

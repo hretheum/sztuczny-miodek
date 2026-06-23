@@ -1,0 +1,89 @@
+# Schemat runnera Stage 2 — kontrakt orkiestracji osądu (Epik G, G1)
+
+Runner (`runner.py`) spina Stage 1 (linter, deterministyczny) ze Stage 2 (osąd modelu).
+Granicą jest MANIFEST. Runner czyta manifest, wybiera segmenty klasy `review`, woła wymienialny
+silnik osądu (`engines.JudgeEngine`) i stosuje bramkę. Rdzeń jest ZERO-DEP (biblioteka standardowa).
+
+## Wejście: manifest lintera
+
+Manifest produkuje `ai_linter --format json`:
+
+```json
+{ "hits":    [{ "file": "...", "line": 12, "id": "EN-CLICHE", "klasa": "review", "match": "robust" }],
+  "summary": [{ "file": "...", "words": 320, "hits": 3, "emdash_max": 1,
+                "density": 0.9, "blockers": 0, "verdict": "PASS" }] }
+```
+
+- `klasa == "review"` to pozycja do OSĄDU MODELU (Stage 2). Tylko te trafienia są routowane.
+- `klasa == "block"` to twardy bloker — linter zamyka go sam na Stage 1, do runnera nie dociera.
+
+## Selekcja segmentów: `select_review_segments(manifest, file_reader=...)`
+
+Zwraca listę `ReviewSegment` — akapity zawierające co najmniej jedno trafienie `review`. Wybór
+akapitów dzieli JEDNĄ funkcję z metrykami E1 (`metrics.review_paragraphs_for_file`), więc zbiór
+osądzanych segmentów jest dokładnie tym, co E1 raportuje jako `routed_words`. Mapowanie linii na
+akapity i wybór adaptera pochodzą z `ai_linter`, nie są reimplementowane.
+
+Wariant awaryjny: gdy plik jest nieczytelny, a ma trafienia `review`, powstaje jeden segment
+zastępczy z całością trafień pliku (spójnie z fallbackiem E1, który traktuje wtedy cały plik jako
+routed). Runner nie gubi trafień.
+
+## Interfejs silnika: `engines.JudgeEngine` (wymienialny)
+
+```python
+class JudgeEngine(ABC):
+    name: str                                    # nazwa silnika (atrybucja E2/E3)
+    def judge(self, segment: ReviewSegment) -> Judgement: ...
+```
+
+Runner zna TYLKO `name` i `judge`. Podmiana silnika (atrapa → lokalny model przez Ollama → API
+przez OpenRouter) to inny argument `engine` do `run_stage2`, bez zmian w runnerze.
+
+### `ReviewSegment` (jednostka routowana)
+
+| Pole | Typ | Opis |
+|---|---|---|
+| `file` | string | ścieżka pliku źródłowego |
+| `seg_index` | int | indeks akapitu w pliku (kolejność dokumentu) |
+| `line` | int | 1-based linia początku akapitu (z `adapter.Segment.line`) |
+| `text` | string | treść akapitu (`doc.text[seg.start:seg.end]`) |
+| `hits` | list[dict] | trafienia `review` przypięte do akapitu (`id, line, klasa, match, file`) |
+
+Metoda `hit_ids()` zwraca listę ID trafień w kolejności z manifestu.
+
+### `Judgement` (werdykt dla jednego segmentu)
+
+| Pole | Typ | Wartości | Opis |
+|---|---|---|---|
+| `verdict` | string | `pass` lub `rewrite` | werdykt osądu |
+| `notes` | string | dowolny | uzasadnienie lub propozycja poprawki |
+| `engine` | string | `= JudgeEngine.name` | atrybucja silnika |
+
+### `StubJudgeEngine` (atrapa, domyślny silnik)
+
+Deterministyczna, bez LLM i bez sieci. Reguła: segment z co najmniej jednym trafieniem `review`
+daje `rewrite` z notatką wymieniającą ID trafień; segment bez trafień daje `pass`. To nie jest
+ocena treści, lecz sygnał, że segment wpadł do Stage 2. Służy do testów potoku, do E3 i jako żywy
+kontrakt. Realny silnik nadpisuje regułę faktyczną oceną modelu, zachowując sygnaturę `judge`.
+
+## Bramka: `run_stage2(manifest, engine=..., file_reader=...) -> dict`
+
+Zwraca:
+
+```json
+{ "segments": [{ "file": "...", "seg_index": 0, "line": 12, "verdict": "rewrite",
+                 "engine": "stub", "notes": "...", "hit_ids": ["EN-CLICHE"] }],
+  "judged": 1, "rewrite": 1, "pass": 0, "engine": "stub", "gate": "FAIL" }
+```
+
+Reguła bramki (surowa, „PASS z uwagami to NIE PASS"): `gate == "FAIL"`, gdy jakikolwiek osąd ma
+`verdict == "rewrite"`. `gate == "PASS"` tylko gdy wszystkie osądy to `pass` lub brak segmentów
+review. CLI `runner.py --manifest plik.json` zwraca exit 1 przy `gate == "FAIL"` (gate-owalne w CI).
+
+## Rozszerzalność E2/E3 (bez przeróbki rdzenia)
+
+`run_stage2` przyjmuje już teraz haki `log_path` i `ts_provider`. W G1 są nieużywane (NO-OP). E3
+dokłada instrumentację w jednym punkcie (`_emit_stage2_run`): dla każdego osądu dopisuje wpis
+`kind="stage2_run"` do wspólnego strumienia decyzji (`decision_log.append_decision`), nie ruszając
+selekcji ani bramki. E2 (atrybucja) czyta `hit_ids` segmentów z wyniku. Schemat wpisu `stage2_run`
+dokumentuje E3 w `decision-log.schema.md`.
