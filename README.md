@@ -312,6 +312,10 @@ python3 corrector.py --file artykul.md --in-place       # zapisz poprawiony teks
 python3 corrector.py --file artykul.md --engine ollama  # korekta realnym modelem (sieć)
 ```
 
+Zakres korektora to proza klasy review. Twarde blokery Stage 1 spoza prozy zostają nietknięte: emoji w nagłówku, cyrylica czy struktura nie-akapitowa to robota lintera i autora, bo korektor przepisuje wyłącznie sporne akapity. Dlatego dokument z czystą już prozą, ale z emoji w nagłówku, da PASS na bramce Stage 2 korektora i wciąż FAIL na pełnym werdykcie lintera. To podział celowy.
+
+Jakość przepisania zależy od silnika. Atrapa offline (`stub`) neutralizuje wzorzec deterministycznie, więc pętla zbiega bez sieci i nadaje się do testów potoku, ale jej wynik tekstowy bywa pokaleczony (wycina dopasowany fragment). Naturalne przepisanie daje dopiero realny model za interfejsem, na przykład Bielik przez Ollama lub model z półki przez OpenRouter. Pełny smoke z żywym endpointem jest osobnym krokiem.
+
 Finalny tekst leci na stdout, raport na stderr. Exit 0, gdy osiągnięto PASS, 1 w przeciwnym razie (gate-owalne). Kontrakt pętli, mapowanie segmentu na edycję i warunki zatrzymania opisuje `corrector.schema.md`; zdolność `rewrite` w silniku jest w `engines.schema.md`. Self-test offline: `tools/check_corrector.py` (wpięty do `tests/run_tests.sh`).
 
 ## Opcjonalna warstwa terminologii domenowej
