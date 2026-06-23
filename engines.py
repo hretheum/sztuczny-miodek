@@ -509,3 +509,99 @@ class OllamaEngine(JudgeEngine):
             timeout=self._timeout,
         )
         return clean_rewrite_reply(_extract_ollama_content(raw), fallback=segment.text)
+
+
+# ============================================================================
+# G3 — ROUTING silnika osądu (lejek kosztowy: lekki na masę, mocny na margines).
+# ============================================================================
+#
+# RoutingJudgeEngine OWIJA dwa silniki za tym samym interfejsem JudgeEngine:
+#   - primary   — lekki/lokalny model (np. Bielik przez Ollama), osądza KAŻDY segment (na masę),
+#   - appellate — mocniejszy model (np. model z najwyższej półki przez OpenRouter), sędzia
+#                 apelacyjny dotykany TYLKO trudnego marginesu.
+#
+# Polityka eskalacji jest KONFIGUROWALNA i UDOKUMENTOWANA. Domyślny przykład (z blueprintu):
+#   1) primary osądza segment,
+#   2) eskaluj do appellate, gdy primary wyda "rewrite" (potencjalny fałszywy alarm — prosimy o
+#      drugą opinię) ALBO segment jest "trudny" (liczba trafień review >= hard_hits_threshold),
+#   3) gdy eskalacja: werdykt APELACJI jest ostateczny (sędzia apelacyjny tnie fałszywe alarmy),
+#   4) gdy primary "pass" na łatwym segmencie: ufaj primary, appellate NIE jest wołany (oszczędność).
+#
+# Cel: mocny model dotyka wyłącznie marginesu → koszt rozumowy spada o rzędy wielkości.
+#
+# .name odzwierciedla skład ("routing:<primary>-><appellate>"). .rewrite deleguje do silnika, który
+# wydałby OSTATECZNY werdykt — decyzję podejmuje deterministycznie ta sama polityka should_escalate
+# na (segment, judgement), więc rewrite jest bezstanowy (nie polega na ukrytym stanie z judge) i
+# bezpieczny w pętli korektora, która woła judge i rewrite osobno.
+#
+# OGRANICZENIE (known-limitation): routing NIE integruje się z auto-offloadem poda RunPod (KAN-220)
+# w tej iteracji. `_is_remote_engine` w runnerze rozpoznaje silnik po prefiksie name ("ollama:" /
+# "openai:"); name routingu zaczyna się od "routing:", więc managed_pod się NIE owinie wokół
+# routingu nawet gdy owija on silnik zdalny. Lifecycle to osobny epik; tu świadomie zostawiamy to
+# jako udokumentowane ograniczenie (mniejsze ryzyko regresji niż rozszerzanie wykrywania).
+
+
+class RoutingJudgeEngine(JudgeEngine):
+    """Routing dwóch silników osądu za interfejsem JudgeEngine (G3 — lejek kosztowy).
+
+    Konstruktor `(primary, appellate, *, escalate_on_rewrite=True, hard_hits_threshold=None)`:
+      - primary             : JudgeEngine osądzający KAŻDY segment (lekki/lokalny, na masę),
+      - appellate           : JudgeEngine — sędzia apelacyjny dotykany tylko trudnego marginesu,
+      - escalate_on_rewrite : gdy True, primary "rewrite" eskaluje do appellate (druga opinia),
+      - hard_hits_threshold : gdy ustawiony (int), segment z >= tylu trafieniami review eskaluje
+                              niezależnie od werdyktu primary (segment „trudny").
+
+    Polityka eskalacji jest świadoma i bezstanowa — patrz `should_escalate`. Werdykt appellate jest
+    ostateczny po eskalacji; bez eskalacji bierzemy werdykt primary (oszczędność). `.name` odzwierciedla
+    skład. `.rewrite` deleguje do silnika, który wydał ostateczny werdykt.
+    """
+
+    def __init__(self, primary: JudgeEngine, appellate: JudgeEngine, *,
+                 escalate_on_rewrite: bool = True, hard_hits_threshold=None):
+        if primary is None or appellate is None:
+            raise ValueError("RoutingJudgeEngine wymaga primary i appellate (oba JudgeEngine)")
+        if hard_hits_threshold is not None:
+            if isinstance(hard_hits_threshold, bool) or not isinstance(hard_hits_threshold, int) \
+                    or hard_hits_threshold < 1:
+                raise ValueError(
+                    "hard_hits_threshold musi być None albo dodatnią liczbą całkowitą, "
+                    f"jest {hard_hits_threshold!r}"
+                )
+        self.primary = primary
+        self.appellate = appellate
+        self.escalate_on_rewrite = bool(escalate_on_rewrite)
+        self.hard_hits_threshold = hard_hits_threshold
+        self.name = f"routing:{primary.name}->{appellate.name}"
+
+    def should_escalate(self, segment: ReviewSegment, primary_judgement: Judgement) -> bool:
+        """Polityka eskalacji (deterministyczna, bezstanowa). True => zapytaj appellate.
+
+        Eskalujemy gdy primary chce ruszyć tekst (potencjalny fałszywy alarm — druga opinia)
+        ALBO segment jest „trudny" wg liczby trafień review (>= hard_hits_threshold)."""
+        if self.escalate_on_rewrite and primary_judgement.verdict == "rewrite":
+            return True
+        if self.hard_hits_threshold is not None and len(segment.hits) >= self.hard_hits_threshold:
+            return True
+        return False
+
+    def judge(self, segment: ReviewSegment) -> Judgement:
+        jp = self.primary.judge(segment)
+        if not self.should_escalate(segment, jp):
+            # Łatwy segment, primary ufny — appellate nie dotknięty (oszczędność, sedno lejka).
+            return jp
+        ja = self.appellate.judge(segment)
+        # Werdykt apelacji jest ostateczny; notatki łączą obie opinie dla audytu.
+        notes = (f"[primary {jp.verdict}: {jp.notes}] -> "
+                 f"[appellate {ja.verdict}: {ja.notes}]")
+        return Judgement(verdict=ja.verdict, notes=notes, engine=ja.engine)
+
+    def rewrite(self, segment: ReviewSegment, judgement: Judgement) -> str:
+        """Deleguje przepisanie do silnika, który wydałby OSTATECZNY werdykt.
+
+        Pętla korektora woła judge i rewrite osobno, więc rewrite nie może polegać na stanie z judge.
+        Ponawiamy tanią ocenę primary i tę samą politykę `should_escalate(segment, primary_judgement)`:
+        gdy eskalacja → appellate.rewrite, inaczej → primary.rewrite. Deterministyczne i bezstanowe."""
+        jp = self.primary.judge(segment)
+        if self.should_escalate(segment, jp):
+            return self.appellate.rewrite(segment, judgement)
+        return self.primary.rewrite(segment, judgement)

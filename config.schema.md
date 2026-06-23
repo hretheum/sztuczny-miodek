@@ -78,16 +78,25 @@ Rodzeństwo `economy`. Wskazuje, którym silnikiem osądzać Stage 2. Czytana os
 
 | Klucz | Typ | Znaczenie |
 |---|---|---|
-| `engine` | `stub`\|`openai`\|`ollama` | aktywny silnik osądu |
+| `engine` | `stub`\|`openai`\|`ollama`\|`routing` | aktywny silnik osądu |
 | `openai.base_url`, `openai.model` | string | wymagane gdy `engine="openai"` |
 | `openai.api_key_env` | string | nazwa ENV z kluczem (sekret NIGDY w pliku) |
 | `openai.extra_headers` | obiekt | dodatkowe nagłówki (np. OpenRouter `HTTP-Referer`) |
 | `ollama.host`, `ollama.model` | string | wymagane gdy `engine="ollama"` |
+| `routing.primary`, `routing.appellate` | obiekt | wymagane gdy `engine="routing"` (G3); pod-config jak `stage2` |
+| `routing.escalate_on_rewrite` | bool | eskaluj do appellate gdy primary wyda `rewrite` (domyślnie `true`) |
+| `routing.hard_hits_threshold` | int\|null | eskaluj gdy `len(hits) >=` tej liczby (segment „trudny") |
 
 - Brak sekcji `stage2` lub brak configu → `{"engine": "stub"}` (zero zmiany zachowania, zero sieci).
 - Walidacja: `engine` z dozwolonych; dla aktywnego realnego silnika wymagany podsłownik z kluczami
   (openai: `base_url`+`model`; ollama: `host`+`model`). Brak → `ValueError`. Sekcje nieaktywnych
   silników nie są walidowane.
+- **Routing (G3)**: gdy `engine="routing"`, wymagana podsekcja `routing` z `primary` i `appellate` —
+  każdy to pod-config o kształcie `stage2` (`engine` + sekcja silnika), budowany REKURENCYJNIE przez
+  `runner._build_single_engine`. Routing jest JEDNOPOZIOMOWY: `engine="routing"` wewnątrz
+  `primary`/`appellate` jest zabronione (`ValueError`) — ochrona przed cyklem rekurencji. Polityka
+  eskalacji (`escalate_on_rewrite`, `hard_hits_threshold`) i ograniczenie wobec auto-offloadu poda
+  opisuje `engines.schema.md` (sekcja „Routing silnika").
 - Klucz API czytany WYŁĄCZNIE z ENV (przez `api_key_env`) w konstruktorze silnika, nigdy z pliku.
 - Konsument: `runner.build_engine_from_config` (CLI `runner.py --engine ... --config ...`).
   Kontrakt adapterów: `engines.schema.md`.

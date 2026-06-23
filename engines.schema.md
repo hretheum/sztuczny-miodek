@@ -146,3 +146,74 @@ wywołań sieci.
 ```bash
 python3 tools/check_engines.py
 ```
+
+## Routing silnika `RoutingJudgeEngine` (G3 — lejek kosztowy)
+
+Routing OWIJA dwa silniki za tym samym interfejsem `JudgeEngine`, żeby mocny model dotykał wyłącznie
+trudnego marginesu:
+
+- `primary` — lekki/lokalny model (np. Bielik przez Ollama), osądza KAŻDY segment (na masę),
+- `appellate` — mocniejszy model (np. model z najwyższej półki przez OpenRouter), sędzia apelacyjny
+  dotykany TYLKO po eskalacji.
+
+Konstruktor: `RoutingJudgeEngine(primary, appellate, *, escalate_on_rewrite=True, hard_hits_threshold=None)`.
+
+### Polityka eskalacji (`should_escalate(segment, primary_judgement) -> bool`)
+
+Deterministyczna i bezstanowa. Eskaluj do appellate, gdy:
+
+1. `escalate_on_rewrite` i primary wydał `rewrite` (potencjalny fałszywy alarm — prosimy o drugą
+   opinię), LUB
+2. `hard_hits_threshold` ustawiony i `len(segment.hits) >= hard_hits_threshold` (segment „trudny").
+
+`judge`: primary osądza; gdy `should_escalate` → appellate osądza i jego werdykt jest OSTATECZNY
+(notatki łączą obie opinie: `[primary <v>: ...] -> [appellate <v>: ...]`, `engine` = appellate).
+Gdy brak eskalacji (primary `pass` na łatwym segmencie) → zwracamy werdykt primary, appellate NIE
+jest wołany (oszczędność — sedno lejka kosztowego).
+
+- `name == "routing:<primary.name>-><appellate.name>"` (odzwierciedla skład).
+- `rewrite` deleguje do silnika, który wydałby ostateczny werdykt: ponawia tanią ocenę primary i tę
+  samą politykę `should_escalate(segment, primary_judgement)` → `appellate.rewrite` po eskalacji,
+  inaczej `primary.rewrite`. Bezstanowe (nie polega na stanie z poprzedniego `judge`), więc bezpieczne
+  w pętli korektora, która woła `judge` i `rewrite` osobno.
+
+### Konfiguracja: `stage2.routing` (rekurencyjna)
+
+```json
+"stage2": {
+  "engine": "routing",
+  "routing": {
+    "escalate_on_rewrite": true,
+    "hard_hits_threshold": 2,
+    "primary":   { "engine": "ollama", "ollama": { "host": "...", "model": "bielik" } },
+    "appellate": { "engine": "openai", "openai": { "base_url": "...", "model": "..." } }
+  }
+}
+```
+
+- `primary` i `appellate` to pod-configi o KSZTAŁCIE sekcji `stage2` (klucz `engine` + sekcja silnika);
+  `build_engine_from_config` buduje je REKURENCYJNIE przez wydzieloną `runner._build_single_engine`.
+- Routing jest JEDNOPOZIOMOWY: `engine: "routing"` wewnątrz `primary`/`appellate` jest zabronione
+  (`config.load_stage2` i `_build_single_engine` rzucają `ValueError`) — ochrona przed cyklem rekurencji.
+- `config.load_stage2` waliduje obecność `routing.primary` i `routing.appellate`, każdy przez
+  `_validate_leaf_engine`, oraz typ `hard_hits_threshold` (null albo dodatnia liczba całkowita).
+- Domyślny `config.json` ma `stage2.engine: "stub"`, a `stage2.routing` jest szkicem w rezerwie
+  (primary ollama/bielik, appellate openai) — zero zmiany zachowania bez jawnego wyboru routingu.
+
+### OGRANICZENIE (known-limitation): routing a auto-offload poda (KAN-220)
+
+Routing NIE integruje się z auto-offloadem poda RunPod w tej iteracji. `runner._is_remote_engine`
+rozpoznaje silnik zdalny po prefiksie `name` (`"ollama:"` / `"openai:"`); `name` routingu zaczyna się
+od `"routing:"`, więc `managed_pod` się NIE owinie wokół routingu, nawet gdy owija on silnik zdalny.
+Lifecycle to osobny epik — świadomie zostawiamy to jako udokumentowane ograniczenie (mniejsze ryzyko
+regresji niż rozszerzanie wykrywania).
+
+### Test offline
+
+`tools/check_routing.py` (wpięty do `tests/run_tests.sh`) weryfikuje na ATRAPACH `JudgeEngine` (bez
+sieci, bez modelu): łatwy segment ufa primary (appellate niedotknięty — licznik wywołań 0), `rewrite`
+i segment trudny eskalują (werdykt appellate ostateczny), `.name` odzwierciedla skład, `.rewrite`
+deleguje do właściwego silnika, fabryka z configu (rekurencja + zakaz zagnieżdżenia + walidacja).
+```bash
+python3 tools/check_routing.py
+```

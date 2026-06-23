@@ -163,6 +163,20 @@ else
   echo "FAIL korektor G2 — petla nie zbiega do PASS na atrapie, nie zatrzymuje sie na braku postepu/limicie iteracji, zapis zwrotny rozjechal akapity albo kontrakt rewrite (domyslny no-op / atrapa korektora) pekl (patrz wyzej)"; fail=1
 fi
 
+echo "== Routing G3: lejek kosztowy (primary na masę, appellate na margines) + fabryka rekurencyjna =="
+if python3 "$DIR/../tools/check_routing.py"; then
+  : # OK — komunikat wypisuje sam skrypt
+else
+  echo "FAIL routing G3 — eskalacja do apelacji na rewrite/trudnym, ufanie primary na łatwym (appellate niedotknięty), .name/.rewrite/delegacja albo fabryka z configu (rekurencja/zakaz zagnieżdżenia/walidacja) rozjechały się (patrz wyżej)"; fail=1
+fi
+
+echo "== LanguageTool G4: klient korekty na żądanie (parse /v2/check, form-encode, odporność) =="
+if python3 "$DIR/../tools/check_languagetool.py"; then
+  : # OK — komunikat wypisuje sam skrypt
+else
+  echo "FAIL LanguageTool G4 — parsowanie matches na Suggestion, POST form-encoded text+language, Content-Type/User-Agent albo odporność na pusty/uszkodzony JSON rozjechały się (patrz wyżej)"; fail=1
+fi
+
 if [[ $fail -eq 0 ]]; then
   echo "WSZYSTKIE TESTY PRZESZŁY."
 else

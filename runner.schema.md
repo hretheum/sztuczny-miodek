@@ -104,6 +104,16 @@ zmian w instrumentacji — logowanie działa dla każdego silnika (atrybucja po 
 Realne adaptery (`OpenAICompatEngine`, `OllamaEngine`) i ich kontrakt opisuje `engines.schema.md`.
 Runner wybiera silnik fabryką `build_engine_from_config(name=None, config_path=...)`: `name=None` →
 `stage2.engine` z `config.json` (fallback `stub`); `name` (CLI `--engine`) nadpisuje. CLI:
-`runner.py --manifest plik.json [--engine stub|openai|ollama] [--config config.json]`. Domyślnie
-atrapa — realne silniki wybierane jawnie i wymagają sieci. `run_stage2` bez zmian (dostaje gotowy
-silnik).
+`runner.py --manifest plik.json [--engine stub|openai|ollama|routing] [--config config.json]`.
+Domyślnie atrapa — realne silniki wybierane jawnie i wymagają sieci. `run_stage2` bez zmian (dostaje
+gotowy silnik).
+
+## Routing silnika (G3 — lejek kosztowy)
+
+`build_engine_from_config` rozpoznaje też `engine="routing"`: buduje `RoutingJudgeEngine`, którego
+`primary` i `appellate` powstają REKURENCYJNIE z `stage2.routing.{primary,appellate}` przez wydzieloną
+`_build_single_engine(sub_cfg)` (refaktor: wspólne ciało dla stub/openai/ollama). Routing owija lekki
+silnik (na masę) i mocny sędzia apelacyjny (na trudny margines) — kontrakt, polityka eskalacji,
+rekurencja i ograniczenie wobec auto-offloadu poda (KAN-220) są w `engines.schema.md` (sekcja „Routing
+silnika `RoutingJudgeEngine`"). `_build_single_engine` odrzuca `engine="routing"` (routing jest
+jednopoziomowy). `run_stage2` i bramka pozostają nietknięte — routing to po prostu inny `JudgeEngine`.

@@ -54,6 +54,27 @@
       "host": "http://localhost:11434",
       "model": "bielik"
     },
+    "routing": {
+      "opis": "Routing silnika (G3) — lejek kosztowy: primary (lekki/lokalny) osądza na masę; gdy primary chce ruszyć tekst (rewrite = potencjalny fałszywy alarm) ALBO segment jest trudny (>= hard_hits_threshold trafień review), eskaluj do appellate (mocniejszy sędzia apelacyjny) i bierz werdykt appellate. Gdy primary pass na łatwym segmencie — ufaj primary (appellate nie wołany). Aktywne tylko gdy stage2.engine='routing'. primary/appellate to pod-configi jak stage2 (engine + sekcja silnika); zakaz engine='routing' wewnątrz (routing jednopoziomowy). Ograniczenie: routing NIE integruje się z auto-offloadem poda (lifecycle) w tej iteracji.",
+      "escalate_on_rewrite": true,
+      "hard_hits_threshold": 2,
+      "primary": {
+        "engine": "ollama",
+        "ollama": {
+          "host": "http://localhost:11434",
+          "model": "bielik"
+        }
+      },
+      "appellate": {
+        "engine": "openai",
+        "openai": {
+          "base_url": "https://openrouter.ai/api/v1",
+          "model": "openrouter/auto",
+          "api_key_env": "OPENROUTER_API_KEY",
+          "extra_headers": {}
+        }
+      }
+    },
     "lifecycle": {
       "opis": "Auto-offload poda RunPod po przebiegu Stage 2 (KAN-220). manage=false => NO-OP (runner nie owija przebiegu, zero zmiany zachowania). Gdy manage=true: pod_id wymagany; on_finish stop (GPU gaśnie, model zostaje) lub terminate (kasacja). idle_backstop_s to próg backstopu egzekwowanego przez watchdog NA podzie (tools/runpod_idle_watchdog.sh). Klucz API z ENV (api_key_env), NIGDY z pliku.",
       "manage": false,

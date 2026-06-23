@@ -53,6 +53,7 @@ import config  # noqa: E402  (KAN-218: load_stage2 — wybór silnika Stage 2 z 
 import runpod_lifecycle  # noqa: E402  (KAN-220: auto-offload poda RunPod po przebiegu Stage 2)
 from engines import (  # noqa: E402
     JudgeEngine, ReviewSegment, StubJudgeEngine, OpenAICompatEngine, OllamaEngine,
+    RoutingJudgeEngine,
 )
 
 # Wartość pola `kind` dla wpisów instrumentacji E3 (odróżnia je od wpisów D4 accept/reject).
@@ -234,27 +235,29 @@ def run_stage2(manifest, engine: JudgeEngine = None, file_reader=metrics._defaul
     }
 
 
-def build_engine_from_config(name=None, config_path=config.CONFIG_PATH):
-    """Buduje instancję silnika Stage 2 z konfiguracji (KAN-218).
+def _build_single_engine(sub_cfg):
+    """Buduje JEDEN nie-routujący silnik z pod-configu o kształcie sekcji `stage2`.
 
-    `name` (jeśli podane) nadpisuje `stage2.engine` z configu — pozwala wymusić silnik z CLI.
-    `name=None` → użyj `engine` z `config.load_stage2` (fallback: "stub", gdy brak sekcji/configu).
+    Pod-config: `{"engine": "stub"|"openai"|"ollama", <sekcja silnika>}`. Wydzielone z
+    `build_engine_from_config`, by routing (G3) mógł zbudować primary i appellate REKURENCYJNIE
+    tą samą logiką. Zakaz `engine: "routing"` tutaj — routing nie zagnieżdża się w sobie (płaski,
+    jednopoziomowy; ochrona przed cyklem/nieskończoną rekurencją). Klucz API NIE jest tu czytany —
+    robi to konstruktor silnika z os.environ.
 
     Mapowanie:
       stub   → StubJudgeEngine() (domyślny, zero-dep, bez sieci),
-      openai → OpenAICompatEngine z `stage2.openai` (base_url/model/api_key_env/extra_headers),
-      ollama → OllamaEngine z `stage2.ollama` (host/model).
-
-    Klucz API NIE jest tu czytany — robi to konstruktor silnika z os.environ (separacja:
-    config = co, ENV = sekret). Realny silnik zadziała tylko z siecią; to świadomy wybór
-    operatora, nie ścieżka testowa."""
-    cfg = config.load_stage2(config_path)
-    engine = name or cfg.get("engine", "stub")
-
+      openai → OpenAICompatEngine z `openai` (base_url/model/api_key_env/extra_headers),
+      ollama → OllamaEngine z `ollama` (host/model)."""
+    engine = sub_cfg.get("engine", "stub")
+    if engine == "routing":
+        raise ValueError(
+            "stage2.routing.{primary,appellate} nie może mieć engine='routing' "
+            "(routing jest jednopoziomowy — bez zagnieżdżania)"
+        )
     if engine == "stub":
         return StubJudgeEngine()
     if engine == "openai":
-        o = cfg.get("openai", {})
+        o = sub_cfg.get("openai", {})
         if not o.get("base_url") or not o.get("model"):
             raise ValueError("stage2.openai wymaga base_url i model (uzupełnij config.json)")
         return OpenAICompatEngine(
@@ -263,13 +266,45 @@ def build_engine_from_config(name=None, config_path=config.CONFIG_PATH):
             extra_headers=o.get("extra_headers"),
         )
     if engine == "ollama":
-        o = cfg.get("ollama", {})
+        o = sub_cfg.get("ollama", {})
         if not o.get("model"):
             raise ValueError("stage2.ollama wymaga model (uzupełnij config.json)")
         return OllamaEngine(
             host=o.get("host", "http://localhost:11434"), model=o["model"],
         )
     raise ValueError(f"nieznany silnik Stage 2: {engine!r} (dozwolone: stub, openai, ollama)")
+
+
+def build_engine_from_config(name=None, config_path=config.CONFIG_PATH):
+    """Buduje instancję silnika Stage 2 z konfiguracji (KAN-218, rozszerzone o routing w G3).
+
+    `name` (jeśli podane) nadpisuje `stage2.engine` z configu — pozwala wymusić silnik z CLI.
+    `name=None` → użyj `engine` z `config.load_stage2` (fallback: "stub", gdy brak sekcji/configu).
+
+    Mapowanie:
+      stub    → StubJudgeEngine() (domyślny, zero-dep, bez sieci),
+      openai  → OpenAICompatEngine z `stage2.openai`,
+      ollama  → OllamaEngine z `stage2.ollama`,
+      routing → RoutingJudgeEngine (G3): primary i appellate budowane REKURENCYJNIE z
+                `stage2.routing.{primary,appellate}` (każdy to pod-config jak dzisiejsze stage2),
+                polityka z `stage2.routing.{escalate_on_rewrite,hard_hits_threshold}`.
+
+    Klucz API NIE jest tu czytany — robi to konstruktor silnika z os.environ (separacja:
+    config = co, ENV = sekret). Realny silnik zadziała tylko z siecią; to świadomy wybór
+    operatora, nie ścieżka testowa."""
+    cfg = config.load_stage2(config_path)
+    engine = name or cfg.get("engine", "stub")
+
+    if engine == "routing":
+        routing = cfg.get("routing", {})
+        primary = _build_single_engine(routing.get("primary", {}))
+        appellate = _build_single_engine(routing.get("appellate", {}))
+        return RoutingJudgeEngine(
+            primary, appellate,
+            escalate_on_rewrite=routing.get("escalate_on_rewrite", True),
+            hard_hits_threshold=routing.get("hard_hits_threshold"),
+        )
+    return _build_single_engine({"engine": engine, **{k: v for k, v in cfg.items() if k != "engine"}})
 
 
 def run_stage2_managed(manifest, engine, config_path=config.CONFIG_PATH,
@@ -311,9 +346,10 @@ def _main(argv=None):
         description="Runner Stage 2: osąd modelu na segmentach review z manifestu (G1)."
     )
     ap.add_argument("--manifest", required=True, help="Ścieżka do manifestu JSON ('-' = stdin).")
-    ap.add_argument("--engine", default=None, choices=("stub", "openai", "ollama"),
+    ap.add_argument("--engine", default=None, choices=("stub", "openai", "ollama", "routing"),
                     help="Silnik osądu. Domyślnie czytany z config.json (sekcja stage2; fallback "
-                         "'stub'). 'openai'/'ollama' wymagają sieci — świadomy wybór operatora.")
+                         "'stub'). 'openai'/'ollama' wymagają sieci — świadomy wybór operatora. "
+                         "'routing' wymaga sekcji stage2.routing (primary + appellate).")
     ap.add_argument("--config", default=config.CONFIG_PATH,
                     help="Ścieżka do config.json (sekcja stage2). Domyślnie config repo.")
     args = ap.parse_args(argv)

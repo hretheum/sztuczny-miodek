@@ -158,12 +158,43 @@ def load_economy(path: str = CONFIG_PATH) -> dict:
 
 DEFAULT_STAGE2 = {"engine": "stub"}
 
-_STAGE2_ENGINES = ("stub", "openai", "ollama")
+_STAGE2_ENGINES = ("stub", "openai", "ollama", "routing")
+# Silniki nie-routujące (dozwolone jako primary/appellate w routingu — routing nie zagnieżdża się).
+_STAGE2_LEAF_ENGINES = ("stub", "openai", "ollama")
 # Klucze wymagane w podsłowniku konfiguracji dla każdego realnego silnika.
 _STAGE2_REQUIRED = {
     "openai": ("base_url", "model"),
     "ollama": ("host", "model"),
 }
+
+
+def _validate_leaf_engine(sub, where):
+    """Waliduje pod-config pojedynczego (nie-routującego) silnika — używane przez routing (G3).
+
+    `sub` to dict o kształcie sekcji `stage2`: `engine` ∈ leaf + (dla openai/ollama) podsłownik
+    z wymaganymi kluczami. `where` to etykieta do komunikatu błędu (np. "stage2.routing.primary").
+    Zakaz `engine: "routing"` (routing jest jednopoziomowy — ochrona przed cyklem rekurencji)."""
+    if not isinstance(sub, dict):
+        raise ValueError(f"config.json: {where} musi być obiektem (pod-config silnika)")
+    engine = sub.get("engine", "stub")
+    if engine == "routing":
+        raise ValueError(
+            f"config.json: {where}.engine nie może być 'routing' "
+            f"(routing jest jednopoziomowy — bez zagnieżdżania)"
+        )
+    if engine not in _STAGE2_LEAF_ENGINES:
+        raise ValueError(
+            f"config.json: {where}.engine musi być jednym z {_STAGE2_LEAF_ENGINES}, jest {engine!r}"
+        )
+    if engine in _STAGE2_REQUIRED:
+        inner = sub.get(engine)
+        if not isinstance(inner, dict):
+            raise ValueError(
+                f"config.json: {where}.engine={engine!r} wymaga sekcji '{where}.{engine}' (obiekt)"
+            )
+        missing = [k for k in _STAGE2_REQUIRED[engine] if not inner.get(k)]
+        if missing:
+            raise ValueError(f"config.json: {where}.{engine} — brakujące/puste klucze: {missing}")
 
 
 def load_stage2(path: str = CONFIG_PATH) -> dict:
@@ -207,6 +238,27 @@ def load_stage2(path: str = CONFIG_PATH) -> dict:
             raise ValueError(
                 f"config.json: stage2.{engine} — brakujące/puste klucze: {missing}"
             )
+
+    # G3: routing wymaga podsekcji `routing` z `primary` i `appellate` (każdy to pod-config
+    # nie-routującego silnika). Walidujemy rekurencyjnie przez _validate_leaf_engine, z zakazem
+    # zagnieżdżonego routingu. `hard_hits_threshold` (jeśli obecny) musi być dodatnią liczbą całk.
+    if engine == "routing":
+        routing = st.get("routing")
+        if not isinstance(routing, dict):
+            raise ValueError(
+                "config.json: stage2.engine='routing' wymaga sekcji 'stage2.routing' (obiekt)"
+            )
+        for role in ("primary", "appellate"):
+            if role not in routing:
+                raise ValueError(f"config.json: stage2.routing wymaga podsekcji '{role}'")
+            _validate_leaf_engine(routing[role], f"stage2.routing.{role}")
+        if "hard_hits_threshold" in routing and routing["hard_hits_threshold"] is not None:
+            v = routing["hard_hits_threshold"]
+            if isinstance(v, bool) or not isinstance(v, int) or v < 1:
+                raise ValueError(
+                    "config.json: stage2.routing.hard_hits_threshold musi być null albo dodatnią "
+                    f"liczbą całkowitą, jest {v!r}"
+                )
 
     return st
 

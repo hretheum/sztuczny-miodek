@@ -296,6 +296,24 @@ python3 runner.py --manifest manifest.json --engine ollama
 
 Gdy `manage: true` i silnik jest zdalny (`ollama`/`openai`), runner owija przebieg w menedżer kontekstu, który gasi pod ZAWSZE po wsadzie. Odporność na padnięcie procesu zbudowano warstwowo: blok `finally` (gasi też przy wyjątku), handlery SIGINT/SIGTERM (gaszą przed zniknięciem procesu i przywracają poprzedni handler), oraz backstop NA PODZIE (`tools/runpod_idle_watchdog.sh`) gaszący pod po `idle_backstop_s` bezczynności na wypadek `kill -9`. Polityka `on_finish`: `stop` (domyślne, GPU gaśnie, model zostaje na dysku) albo `terminate` (trwała kasacja). Błąd gaszenia leci głośno na stderr, bo to bramka kosztowa. Klucz API czytany wyłącznie z ENV (`RUNPOD_API_KEY`). Szczegóły: `runpod-lifecycle.schema.md`; instalacja watchdoga na podzie: `tools/runpod_idle_watchdog.README.md`.
 
+### Routing silnika: lejek kosztowy (G3)
+
+Stage 2 da się prowadzić dwoma silnikami naraz, żeby mocny model dotykał tylko trudnego marginesu. Silnik `routing` owija dwa silniki za tym samym interfejsem: `primary` (lekki, lokalny, na przykład Bielik przez Ollama) osądza każdy segment, a `appellate` (mocniejszy sędzia apelacyjny) jest wołany tylko po eskalacji. Domyślna polityka eskaluje, gdy primary chce ruszyć tekst (werdykt `rewrite`, czyli potencjalny fałszywy alarm) albo gdy segment jest trudny (liczba trafień review co najmniej `hard_hits_threshold`). Po eskalacji werdykt apelacji jest ostateczny, więc sędzia tnie fałszywe alarmy primary. Gdy primary daje `pass` na łatwym segmencie, appellate nie jest wołany. To obniża koszt rozumowy: mocny model dotyka tylko marginesu.
+
+```json
+"stage2": {
+  "engine": "routing",
+  "routing": {
+    "escalate_on_rewrite": true,
+    "hard_hits_threshold": 2,
+    "primary":   { "engine": "ollama", "ollama": { "host": "http://localhost:11434", "model": "bielik" } },
+    "appellate": { "engine": "openai", "openai": { "base_url": "https://openrouter.ai/api/v1", "model": "..." } }
+  }
+}
+```
+
+`primary` i `appellate` to pod-konfiguracje o tym samym kształcie co sekcja `stage2`, budowane rekurencyjnie. Routing jest jednopoziomowy: nie wolno zagnieżdżać `engine: "routing"` w primary ani appellate. Kontrakt, polityka i ograniczenie wobec auto-offloadu poda są w `engines.schema.md` (sekcja „Routing silnika"). Self-test offline na atrapach: `tools/check_routing.py`.
+
 Schematy: `metrics.schema.md` (redukcja, atrybucja, zdrowie), `runner.schema.md` (kontrakt orkiestracji), `engines.schema.md` (kontrakt realnych adapterów silnika), `runpod-lifecycle.schema.md` (auto-offload poda RunPod), `decision-log.schema.md` (wspólny strumień zdarzeń runnera i logu decyzji).
 
 ## Korektor: pętla audyt, poprawka, ponowny audyt (G2)
@@ -317,6 +335,19 @@ Zakres korektora to proza klasy review. Twarde blokery Stage 1 spoza prozy zosta
 Jakość przepisania zależy od silnika. Atrapa offline (`stub`) neutralizuje wzorzec deterministycznie, więc pętla zbiega bez sieci i nadaje się do testów potoku, ale jej wynik tekstowy bywa pokaleczony (wycina dopasowany fragment). Naturalne przepisanie daje dopiero realny model za interfejsem, na przykład Bielik przez Ollama lub model z półki przez OpenRouter. Pełny smoke z żywym endpointem jest osobnym krokiem.
 
 Finalny tekst leci na stdout, raport na stderr. Exit 0, gdy osiągnięto PASS, 1 w przeciwnym razie (gate-owalne). Kontrakt pętli, mapowanie segmentu na edycję i warunki zatrzymania opisuje `corrector.schema.md`; zdolność `rewrite` w silniku jest w `engines.schema.md`. Self-test offline: `tools/check_corrector.py` (wpięty do `tests/run_tests.sh`).
+
+## LanguageTool: pełna korekta polszczyzny na żądanie (G4)
+
+Rdzeń skilla jest lekki i celuje w manieryzm AI. Czasem przyda się pełna korekta polszczyzny: literówki, gramatyka, interpunkcja. Do tego jest opcjonalny dostawca na żądanie: klient LanguageTool (`languagetool.py`). To narzędzie pomocnicze poza bramką. Nie jest częścią Stage 1, Stage 2 ani żadnej bramki jakości i nie odpala się nigdzie automatycznie. Operator uruchamia je świadomie, gdy chce drugiej pary oczu nad polszczyzną.
+
+```bash
+python3 tools/languagetool_check.py --file artykul.md
+python3 tools/languagetool_check.py --text "Mam pewien błont ortograficzny."
+python3 tools/languagetool_check.py --file artykul.md --json
+python3 tools/languagetool_check.py --text "..." --endpoint http://localhost:8081/v2/check
+```
+
+Klient jest zero-dep (biblioteka standardowa, `urllib`) i odpytuje serwer LanguageTool po HTTP: domyślnie publiczny `api.languagetool.org`, ale endpoint jest konfigurowalny, więc można wskazać lokalny serwer i nie wysyłać tekstu na zewnątrz. Zwraca strukturalne sugestie: pozycja, długość, komunikat, proponowane zamienniki, identyfikator reguły i kategorii. Parsowanie odpowiedzi jest odporne na brak pól. Realny serwer jest wołany wyłącznie przy faktycznym uruchomieniu; self-test (`tools/check_languagetool.py`) działa w pełni offline na atrapie transportu, bez wywołań sieci. Kontrakt: `languagetool.schema.md`.
 
 ## Opcjonalna warstwa terminologii domenowej
 
