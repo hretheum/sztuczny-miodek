@@ -17,6 +17,8 @@ Komplement do `engines.schema.md` (silnik + zdolność rewrite) i `runner.schema
    > old_block`) jest ODRZUCana — segment zostaje oryginałem, traktowany jak brak postępu. Tylko
    nie-pogarszająca zmiana ≠ oryginał staje się `adapter.Edit`. Liczone są WSZYSTKIE trafienia (nie
    tylko review), bo nowy manieryzm (np. dołożona półpauza) bywa blokerem spoza klasy review.
+   Audyt ORYGINAŁU segmentu (`audit_fn(seg.text)`) jest memoizowany po treści w obrębie iteracji
+   (review KAN-223), bo jest niezmienny — tnie zbędne I/O pliku tymczasowego bez zmiany logiki.
 3. ZŁOŻENIE — `OutputAdapter.write_back(doc, edits) -> str` (PlainText/Markdown przez
    `apply_edits_to_text`). NIE reimplementujemy składania.
 4. PONOWNY AUDYT — następna iteracja na poprawionym tekście.

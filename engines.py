@@ -317,14 +317,24 @@ def build_rewrite_prompt(segment: ReviewSegment, judgement: Judgement) -> str:
 # KAN-223: kotwice fraz-preambuł i nagłówków „kolejnej wersji”. Linia META, którą realny model
 # (Bielik) dokleja przed właściwą prozą albo używa do rozdzielenia dwóch wariantów. Celowo
 # ZAMKNIĘTY zestaw fraz (nie „dowolna linia z dwukropkiem”), by NIE zjeść legalnego zdania prozy
-# typu „Zrobiliśmy trzy rzeczy:”.
+# typu „Zrobiliśmy trzy rzeczy:”. Warianty z „ogonem” (oto…, here is…) MUSZĄ kończyć się
+# dwukropkiem (review KAN-223), inaczej zjadłyby legalne zdanie „Oto wyniki naszych prac.”.
 _PREAMBLE_ANCHOR_RE = re.compile(
     r"^\s*(?:[#>*\-\s]*)?(?:\*\*\s*)?"
+    r"(?:"
+    # Etykiety bez „ogona” — dopuszczamy opcjonalny dwukropek na końcu, bo cała linia to META.
     r"(?:poprawiona\s+wersja|poprawiony\s+akapit|poprawiona\s+proza"
     r"|skorygowan[ay]\s+wersja|przepisan[ay](?:\s+akapit)?|wersja\s*\d*"
-    r"|alternatywnie|oto(?:\s+(?:poprawion[ay]|przepisan[ay]|nowa))?\b.*"
-    r"|here(?:'s| is)\b.*|corrected\s+version|rewritten(?:\s+version)?)"
-    r"\s*\*{0,2}\s*:?\s*$",
+    r"|alternatywnie|corrected\s+version|rewritten(?:\s+version)?)"
+    r"\s*\*{0,2}\s*:?"
+    r"|"
+    # Warianty z „ogonem” (oto…, here is…) — MUSZĄ kończyć się dwukropkiem, inaczej zjadłyby
+    # legalne zdanie prozy zaczynające się od „Oto …” / „Here is …” bez dwukropka. KAN-223 review.
+    r"(?:oto(?:\s+(?:poprawion[ay]|przepisan[ay]|nowa))?\b.*"
+    r"|here(?:'s| is)\b.*)"
+    r"\s*\*{0,2}\s*:"
+    r")"
+    r"\s*\*{0,2}\s*$",
     re.IGNORECASE,
 )
 

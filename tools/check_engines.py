@@ -225,6 +225,24 @@ def main():
     r_legal = clean_rewrite_reply("Zrobiliśmy trzy rzeczy: zebraliśmy dane, opisaliśmy je i zamknęliśmy.", FB)
     if "Zrobiliśmy trzy rzeczy" not in r_legal:
         fails.append(f"clean_rewrite_reply legalne zdanie z dwukropkiem zjedzone: jest {r_legal!r}")
+    # KAN-223 review (istotna): legalne zdanie prozy zaczynające się od „Oto …” BEZ dwukropka,
+    # gdy jest jedyną treścią, MUSI zostać zachowane (kotwica „oto…” wymaga teraz dwukropka).
+    for legal_oto in (
+        "Oto wyniki naszych prac za kwartał pierwszy.",
+        "Oto trzy wnioski z analizy zespołu.",
+    ):
+        r_oto_legal = clean_rewrite_reply(legal_oto, FB)
+        if r_oto_legal != legal_oto:
+            fails.append(f"clean_rewrite_reply legalne 'Oto …' bez dwukropka zjedzone: jest {r_oto_legal!r}")
+    # analogicznie po angielsku: „Here is …” bez dwukropka jako jedyna treść → zachowane.
+    legal_here = "Here is the summary we agreed on last week."
+    r_here_legal = clean_rewrite_reply(legal_here, FB)
+    if r_here_legal != legal_here:
+        fails.append(f"clean_rewrite_reply legalne 'Here is …' bez dwukropka zjedzone: jest {r_here_legal!r}")
+    # kontrola pozytywna: „Oto …” ZAKOŃCZONE dwukropkiem nadal jest preambułą i jest cięte.
+    r_oto_colon = clean_rewrite_reply("Oto poprawiony akapit:\nSama proza.", FB)
+    if r_oto_colon != "Sama proza.":
+        fails.append(f"clean_rewrite_reply 'Oto …:' z dwukropkiem nie ucięte: jest {r_oto_colon!r}")
 
     # integracyjnie: OllamaEngine.rewrite z wstrzykniętym transportem zwracającym preambułę+2 wersje
     eng_rw = OllamaEngine(

@@ -207,6 +207,18 @@ def correct_document(text, *, file_path, engine, audit_fn=None, max_iter=DEFAULT
         )
         edits: List[adapter.Edit] = []
         poprawione = 0
+        # KAN-223 review (drobna): memoizacja audytu ORYGINAŁU segmentu po treści. audit_fn(seg.text)
+        # jest niezmienny w obrębie iteracji (a często też między iteracjami dla tych samych akapitów),
+        # a make_default_audit pisze/kasuje plik tymczasowy. Cache tnie I/O bez zmiany logiki.
+        baseline_audit_cache: dict = {}
+
+        def _audit_baseline(seg_text):
+            cached = baseline_audit_cache.get(seg_text)
+            if cached is None:
+                cached = audit_fn(seg_text, file_path)
+                baseline_audit_cache[seg_text] = cached
+            return cached
+
         for seg in review_segments:
             j = engine.judge(seg)
             if j.verdict != "rewrite":
@@ -218,7 +230,7 @@ def correct_document(text, *, file_path, engine, audit_fn=None, max_iter=DEFAULT
             # bez sieci, bez LLM). Realny model bywa „leczy chorobę, dokłada gorączkę”: przepisując
             # akapit wprowadza NOWY manieryzm (półpauza, druga triada), przez co pętla się rozjeżdża.
             # Akceptujemy tylko poprawki NIE-pogarszające: nie więcej trafień i nie nowy bloker.
-            old_m, _old_doc = audit_fn(seg.text, file_path)
+            old_m, _old_doc = _audit_baseline(seg.text)
             new_m, _new_doc = audit_fn(new_text, file_path)
             old_hits, old_block = _count_hits_blockers(old_m)
             new_hits, new_block = _count_hits_blockers(new_m)

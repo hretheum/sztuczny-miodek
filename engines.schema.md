@@ -41,9 +41,11 @@ pokazywała. Parser sprząta odpowiedź, zanim segment dostanie tekst:
 
 1. `strip`; pusto → `fallback` (oryginał).
 2. Odcina meta-preambuły/komentarze z początku: linie-kotwice fraz (`Poprawiona wersja:`,
-   `Oto poprawiony akapit:`, `Wersja N:`, `Alternatywnie:`, `Here is …`, `corrected version`) oraz
+   `Oto poprawiony akapit:`, `Wersja N:`, `Alternatywnie:`, `Here is …:`, `corrected version`) oraz
    krótkie etykiety zakończone dwukropkiem. Zestaw fraz jest ZAMKNIĘTY, a etykieta musi być krótka —
-   legalne zdanie prozy z dwukropkiem (np. „Zrobiliśmy trzy rzeczy:”) NIE jest zjadane.
+   legalne zdanie prozy z dwukropkiem (np. „Zrobiliśmy trzy rzeczy:”) NIE jest zjadane. Warianty z
+   „ogonem” (`Oto …`, `Here is …`) MUSZĄ kończyć się dwukropkiem (review KAN-223), inaczej legalne
+   zdanie prozy „Oto wyniki naszych prac.” / „Here is the summary.” zostałoby w całości zjedzone.
 3. Gdy model zwrócił WIELE wersji (rozdzielonych pustą linią lub nagłówkiem nowej wersji), bierze
    PIERWSZY zwarty akapit prozy.
 4. Zdejmuje opakowujące potrójne/pojedyncze cudzysłowy i backtick-fence (zachowanie sprzed KAN-223,
