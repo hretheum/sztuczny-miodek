@@ -8,7 +8,11 @@ narzędzie samo DOPROWADZA tekst do czysta. Jedna iteracja to:
   1. AUDYT     — Stage 1 (linter → manifest) + Stage 2 (runner.run_stage2: osąd silnika na
                  segmentach review, bramka „PASS z uwagami to NIE PASS").
   2. POPRAWKA  — dla każdego segmentu z werdyktem „rewrite" silnik PRZEPISUJE sporny akapit
-                 (engine.rewrite). Zmienione akapity stają się edycjami (adapter.Edit).
+                 (engine.rewrite). STRAŻNIK REGRESJI (KAN-223): po przepisaniu tani audyt Stage 1
+                 obu wersji segmentu; poprawkę, która POGARSZA (więcej trafień lub nowy bloker),
+                 ODRZUCAMY (zostaje oryginał, brak postępu dla segmentu) — chroni zbieżność na
+                 żywym modelu, który przy przepisaniu dokłada nowy manieryzm. Tylko nie-pogarszające
+                 poprawki stają się edycjami (adapter.Edit).
   3. ZŁOŻENIE  — zapis zwrotny przez adapter (OutputAdapter.write_back / apply_edits_to_text),
                  NIE reimplementujemy składania.
   4. PONOWNY AUDYT — kolejna iteracja na poprawionym tekście.
@@ -131,6 +135,18 @@ def make_default_audit(lang="both", profile=None, dict_path=None) -> AuditFn:
     return _audit
 
 
+def _count_hits_blockers(manifest: dict) -> Tuple[int, int]:
+    """Z manifestu Stage 1 zwraca (liczba_trafień, liczba_blokerów).
+
+    Strażnik regresji (KAN-223) liczy WSZYSTKIE trafienia (nie tylko review) — nowy manieryzm po
+    przepisaniu (np. dołożona półpauza, antyteza serią) bywa blokerem spoza klasy review. Blokery
+    z summary[0].blockers (lista). Manifest pusty/bez pól → (0, 0) zachowawczo."""
+    hits = manifest.get("hits", []) or []
+    summary = manifest.get("summary", []) or []
+    blockers = summary[0].get("blockers", []) if summary else []
+    return len(hits), len(blockers or [])
+
+
 def _para_offsets_for_segment(doc: adapter.NormalizedDoc, review_seg) -> Optional[Tuple[int, int]]:
     """Mapuje ReviewSegment (file/seg_index/line/text/hits — bez offsetów) na zakres akapitu w doc.
 
@@ -198,6 +214,16 @@ def correct_document(text, *, file_path, engine, audit_fn=None, max_iter=DEFAULT
             new_text = engine.rewrite(seg, j)
             if new_text == seg.text:
                 continue  # silnik nic nie zmienił dla tego segmentu
+            # STRAŻNIK REGRESJI (KAN-223): tani audyt Stage 1 obu wersji SAMEGO segmentu (offline,
+            # bez sieci, bez LLM). Realny model bywa „leczy chorobę, dokłada gorączkę”: przepisując
+            # akapit wprowadza NOWY manieryzm (półpauza, druga triada), przez co pętla się rozjeżdża.
+            # Akceptujemy tylko poprawki NIE-pogarszające: nie więcej trafień i nie nowy bloker.
+            old_m, _old_doc = audit_fn(seg.text, file_path)
+            new_m, _new_doc = audit_fn(new_text, file_path)
+            old_hits, old_block = _count_hits_blockers(old_m)
+            new_hits, new_block = _count_hits_blockers(new_m)
+            if new_hits > old_hits or new_block > old_block:
+                continue  # poprawka POGARSZA → odrzuć (zostaw oryginał, brak postępu dla segmentu)
             offsets = _para_offsets_for_segment(doc, seg)
             if offsets is None:
                 continue  # nie da się przypiąć do akapitu → pomiń (chroni wierność)

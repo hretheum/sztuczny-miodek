@@ -34,6 +34,7 @@ import runner       # noqa: E402
 from engines import (  # noqa: E402
     OpenAICompatEngine, OllamaEngine, StubJudgeEngine, ReviewSegment,
     parse_model_reply, build_judge_prompt, USER_AGENT,
+    clean_rewrite_reply, REWRITE_SYSTEM_PROMPT, Judgement,
 )
 
 # Segment testowy: akapit z dwoma trafieniami review (ID + match w prompcie).
@@ -191,6 +192,61 @@ def main():
                               hits=[{"id": "PL-RHET", "match": "abc"}])
     if "PL-RHET" not in build_judge_prompt(empty_seg):
         fails.append("build_judge_prompt: pusty text gubi listę trafień")
+
+    # --- KAN-223: clean_rewrite_reply (twardszy parser rewrite) — jednostkowo, OFFLINE ---
+    FB = "ORYGINAŁ"
+    # (a) preambuła „Poprawiona wersja:” + dwie wersje → pierwsza CZYSTA proza, bez komentarza.
+    r_pre = clean_rewrite_reply(
+        "Poprawiona wersja:\nTo jest poprawiony akapit prozy.\n\n"
+        "Wersja 2:\nAlternatywne brzmienie tego samego akapitu.",
+        FB,
+    )
+    if r_pre != "To jest poprawiony akapit prozy.":
+        fails.append(f"clean_rewrite_reply preambuła+2 wersje: oczekiwano czystej 1. prozy, jest {r_pre!r}")
+    # „Oto poprawiony akapit:” jako preambuła
+    r_oto = clean_rewrite_reply("Oto poprawiony akapit:\nSama poprawiona proza tutaj.", FB)
+    if r_oto != "Sama poprawiona proza tutaj.":
+        fails.append(f"clean_rewrite_reply 'Oto ...': oczekiwano samej prozy, jest {r_oto!r}")
+    # dwie wersje rozdzielone TYLKO pustą linią (bez nagłówka) → pierwszy zwarty akapit
+    r_two = clean_rewrite_reply("Pierwsza wersja prozy.\n\nDruga wersja prozy.", FB)
+    if r_two != "Pierwsza wersja prozy.":
+        fails.append(f"clean_rewrite_reply 2 akapity: oczekiwano pierwszego, jest {r_two!r}")
+    # opakowujące cudzysłowy nadal zdejmowane (regresja obecnego zachowania)
+    r_q = clean_rewrite_reply('"Czysty akapit w cudzysłowie."', FB)
+    if r_q != "Czysty akapit w cudzysłowie.":
+        fails.append(f"clean_rewrite_reply cudzysłów: oczekiwano bez cudzysłowu, jest {r_q!r}")
+    # pusta odpowiedź → fallback (oryginał)
+    if clean_rewrite_reply("", FB) != FB:
+        fails.append("clean_rewrite_reply pusta: oczekiwano fallback")
+    # sama preambuła bez prozy → fallback (nie zostawiamy pustego)
+    if clean_rewrite_reply("Poprawiona wersja:", FB) != FB:
+        fails.append("clean_rewrite_reply sama preambuła: oczekiwano fallback")
+    # legalne zdanie prozy z dwukropkiem NIE jest zjadane, gdy jest jedyną treścią
+    r_legal = clean_rewrite_reply("Zrobiliśmy trzy rzeczy: zebraliśmy dane, opisaliśmy je i zamknęliśmy.", FB)
+    if "Zrobiliśmy trzy rzeczy" not in r_legal:
+        fails.append(f"clean_rewrite_reply legalne zdanie z dwukropkiem zjedzone: jest {r_legal!r}")
+
+    # integracyjnie: OllamaEngine.rewrite z wstrzykniętym transportem zwracającym preambułę+2 wersje
+    eng_rw = OllamaEngine(
+        host="http://ollama.test:11434", model="bielik",
+        transport=_capturing_transport(
+            {}, _ollama_envelope("Poprawiona wersja:\nCzysta proza z adaptera.\n\nWersja 2:\nInne brzmienie."),
+        ),
+    )
+    JREW = Judgement(verdict="rewrite", notes="triada", engine="test")
+    got_rw = eng_rw.rewrite(SEG, JREW)
+    if got_rw != "Czysta proza z adaptera.":
+        fails.append(f"OllamaEngine.rewrite parser: oczekiwano czystej prozy, jest {got_rw!r}")
+    # rewrite z pustą odpowiedzią → fallback (segment.text), pętla widzi brak postępu
+    eng_rw_empty = OllamaEngine(
+        host="http://ollama.test:11434", model="bielik",
+        transport=_capturing_transport({}, _ollama_envelope("")),
+    )
+    if eng_rw_empty.rewrite(SEG, JREW) != SEG.text:
+        fails.append("OllamaEngine.rewrite pusta odpowiedź: oczekiwano fallback segment.text")
+    # twardszy system prompt rewrite zawiera jawne reguły (jeden akapit, bez nowych manieryzmów)
+    if "JEDEN akapit" not in REWRITE_SYSTEM_PROMPT or "NOWYCH manieryzmów" not in REWRITE_SYSTEM_PROMPT:
+        fails.append("REWRITE_SYSTEM_PROMPT: brak jawnych twardych reguł wyjścia")
 
     # --- 9: config.load_stage2 ---
     with tempfile.TemporaryDirectory() as tmp:

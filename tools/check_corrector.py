@@ -19,6 +19,9 @@ Weryfikuje:
      (czysty) zostaje znak w znak — Edit nanoszony przez write_back na właściwych offsetach.
   6. KONTRAKT rewrite: domyślny JudgeEngine.rewrite zwraca segment.text (no-op); StubRewriteEngine
      realnie neutralizuje match; StubJudgeEngine dalej TYLKO osądza (brak regresji G1).
+  7. STRAŻNIK REGRESJI (KAN-223): rewrite dokładający NOWY manieryzm (więcej trafień) jest
+     ODRZUCany — segment zostaje oryginałem, pętla kończy „brak postępu” (chroni zbieżność na
+     żywym modelu). 7b: zmiana NEUTRALNA (spacja, zero nowych trafień) przechodzi (granica strażnika).
 
 Exit 1 na rozjeździe (gate w run_tests.sh).
 """
@@ -150,6 +153,52 @@ check("proste" not in rw, "StubRewriteEngine skraca triadę (środkowy człon us
 # StubJudgeEngine dalej tylko osądza (G1 bez regresji): review → rewrite.
 check(StubJudgeEngine().judge(seg).verdict == "rewrite",
       "StubJudgeEngine.judge nadal zwraca 'rewrite' dla review (G1 bez regresji)")
+
+
+# --- 7. STRAŻNIK REGRESJI (KAN-223): poprawka wprowadzająca NOWY manieryzm jest odrzucana ---
+# Atrapa osądza segment jako rewrite, ale jej rewrite DOKŁADA manieryzm (zamienia akapit na taki
+# z większą liczbą trafień). Strażnik liczy trafienia obu wersji segmentu i odrzuca pogorszenie:
+# segment zostaje oryginałem, pętla kończy „brak postępu” (a nie rozjeżdża tekstu do limitu).
+print("[7] strażnik regresji (rewrite dokłada manieryzm → poprawka odrzucona)")
+
+# Akapit wejściowy: JEDEN manieryzm (antyteza PL-ANTI). Rewrite zwraca akapit z triadą PL-RHET +
+# antytezą — WIĘCEJ trafień niż oryginał, więc strażnik MUSI go odrzucić.
+ONE_HIT = "Liczy sie jakosc, a nie ilosc dostarczanych elementow.\n"
+WORSE = "To rozwiazanie jest szybkie, proste i skuteczne, a nie wolne i zawodne."
+
+
+class RegressingEngine(StubJudgeEngine):
+    """Atrapa, której rewrite POGARSZA segment (dokłada triadę do istniejącej antytezy)."""
+    name = "stub-regressing"
+
+    def rewrite(self, segment, judgement):
+        return WORSE
+
+
+# kontrola wstępna: WORSE faktycznie ma więcej trafień niż ONE_HIT (inaczej test nic nie sprawdza).
+hits_one = len(AUDIT(ONE_HIT, "x.txt")[0]["hits"])
+hits_worse = len(AUDIT(WORSE, "x.txt")[0]["hits"])
+check(hits_worse > hits_one,
+      f"setup: WORSE ma więcej trafień niż ONE_HIT ({hits_worse} > {hits_one})")
+
+r7 = corrector.correct_document(ONE_HIT, file_path="x.txt", engine=RegressingEngine(),
+                                audit_fn=AUDIT, max_iter=4)
+check(r7.reason == "brak postępu",
+      f"strażnik: reason == 'brak postępu' (jest {r7.reason!r})")
+check(r7.passed is False, "strażnik: passed == False")
+check(r7.iterations == 1, f"strażnik: STOP po 1. iteracji (jest {r7.iterations})")
+check(r7.text == ONE_HIT, "strażnik: tekst BEZ zmian (pogarszająca poprawka odrzucona)")
+check(WORSE.strip() not in r7.text, "strażnik: nowy manieryzm NIE trafił do tekstu")
+
+# Granica strażnika: zmiana NEUTRALNA (NonConvergingEngine dokłada tylko spację, ZERO nowych
+# trafień) MUSI przejść — inaczej zepsulibyśmy test [4] „limit iteracji”. To potwierdza, że
+# strażnik odrzuca tylko POGORSZENIE (ostre nierówności), nie zmianę neutralną.
+print("[7b] strażnik przepuszcza zmianę neutralną (spacja, bez nowych trafień)")
+r7b = corrector.correct_document(DIRTY, file_path="x.txt", engine=NonConvergingEngine(),
+                                 audit_fn=AUDIT, max_iter=3)
+check(r7b.reason == "limit iteracji",
+      f"neutralna zmiana dochodzi do limitu (jest {r7b.reason!r})")
+check(len(r7b.trace) == 3, "neutralna zmiana: pętla iteruje do max_iter (strażnik nie blokuje)")
 
 
 # --- podsumowanie ---

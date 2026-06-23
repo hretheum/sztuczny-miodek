@@ -32,8 +32,28 @@ zwrot równy oryginałowi jako BRAK POSTĘPU i zatrzymuje się, zamiast psuć te
 - `OpenAICompatEngine` / `OllamaEngine` — nadpisują `rewrite`: osobny prompt PO POLSKU
   (`REWRITE_SYSTEM_PROMPT` + `build_rewrite_prompt(segment, judgement)`), `temperature: 0`, ta sama
   koperta i wstrzykiwalny `transport` co `judge`. Odpowiedź czyści `clean_rewrite_reply(content,
-  fallback=segment.text)` (zdejmuje opakowujące cudzysłowy/backticki; pusta odpowiedź → oryginał, by
-  pętla widziała brak postępu, nie utratę treści).
+  fallback=segment.text)`.
+
+### `clean_rewrite_reply` — twardszy parser (KAN-223)
+
+Realny model (Bielik Q4) bywa gadatliwy: dokleja komentarz i podaje dwie wersje, czego atrapa nie
+pokazywała. Parser sprząta odpowiedź, zanim segment dostanie tekst:
+
+1. `strip`; pusto → `fallback` (oryginał).
+2. Odcina meta-preambuły/komentarze z początku: linie-kotwice fraz (`Poprawiona wersja:`,
+   `Oto poprawiony akapit:`, `Wersja N:`, `Alternatywnie:`, `Here is …`, `corrected version`) oraz
+   krótkie etykiety zakończone dwukropkiem. Zestaw fraz jest ZAMKNIĘTY, a etykieta musi być krótka —
+   legalne zdanie prozy z dwukropkiem (np. „Zrobiliśmy trzy rzeczy:”) NIE jest zjadane.
+3. Gdy model zwrócił WIELE wersji (rozdzielonych pustą linią lub nagłówkiem nowej wersji), bierze
+   PIERWSZY zwarty akapit prozy.
+4. Zdejmuje opakowujące potrójne/pojedyncze cudzysłowy i backtick-fence (zachowanie sprzed KAN-223,
+   teraz NA KOŃCU, bo preambuła mogła stać przed cudzysłowem otwierającym).
+5. Wynik pusty lub sama interpunkcja → `fallback`. Fail-safe: NIGDY nie zwraca pustego napisu, więc
+   pętla widzi brak postępu zamiast utraty treści.
+
+`REWRITE_SYSTEM_PROMPT` jest twardy: jeden akapit, sama poprawiona proza, bez nagłówków/etykiet/
+komentarza/cudzysłowów, bez drugiej wersji oraz bez NOWYCH manieryzmów (półpauzy, triady, antytezy,
+puste superlatywy). `build_rewrite_prompt` powtarza ten wymóg w user-message.
 
 Pętla korektora woła silnik wyłącznie przez `judge` + `rewrite`; wybór i podmiana atrapy →
 `corrector.build_corrector_engine`. Szczegóły w `corrector.schema.md`.

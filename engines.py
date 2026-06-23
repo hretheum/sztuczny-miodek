@@ -245,8 +245,14 @@ REWRITE_SYSTEM_PROMPT = (
     "Jesteś redaktorem polszczyzny. Dostajesz JEDEN akapit oznaczony przez linter jako manieryzm AI "
     "(triady „A, B i C”, antytezy „X, a nie Y”, puste superlatywy, nadmiar myślników, signposty). "
     "Przepisz ten akapit, USUWAJĄC manieryzm, ale ZACHOWUJĄC sens, fakty, rejestr i język oryginału. "
-    "Nie skracaj treści merytorycznej, nie dodawaj nowych myśli. "
-    "Zwróć WYŁĄCZNIE poprawioną prozę: bez komentarza, bez wyjaśnień, bez cudzysłowów, bez opakowania."
+    "Nie skracaj treści merytorycznej, nie dodawaj nowych myśli.\n"
+    "WYJŚCIE — twarde reguły:\n"
+    "1. Zwróć DOKŁADNIE JEDEN akapit poprawionej prozy i NIC więcej.\n"
+    "2. BEZ nagłówków, BEZ etykiet typu „Poprawiona wersja:” czy „Oto poprawiony akapit:”, "
+    "BEZ komentarza przed ani po, BEZ cudzysłowów, BEZ opakowania. Tylko sam tekst.\n"
+    "3. NIE podawaj dwóch wariantów ani wersji alternatywnej. Jedna, ostateczna wersja.\n"
+    "4. NIE wprowadzaj NOWYCH manieryzmów: bez półpauz i myślników, bez triad „A, B i C”, "
+    "bez antytez „X, a nie Y”, bez pustych superlatywów."
 )
 
 # KAN-221: domyślny User-Agent. Proxy RunPoda (proxy.runpod.net) zwraca 403 Forbidden dla
@@ -301,28 +307,127 @@ def build_rewrite_prompt(segment: ReviewSegment, judgement: Judgement) -> str:
             lines.append(f"- {h.get('id', '?')}: \"{h.get('match', '')}\"")
     if judgement is not None and getattr(judgement, "notes", ""):
         lines.append(f"Uwaga sędziego: {judgement.notes}")
-    lines.append("Przepisz akapit bez manieryzmu. Zwróć WYŁĄCZNIE poprawioną prozę.")
+    lines.append(
+        "Zwróć DOKŁADNIE jeden akapit samej poprawionej prozy: bez nagłówka, bez etykiety, "
+        "bez komentarza, bez cudzysłowów, bez drugiej wersji. Nie dokładaj nowych manieryzmów."
+    )
     return "\n".join(lines)
 
 
-def clean_rewrite_reply(content: str, fallback: str) -> str:
-    """Wyłuskuje czystą prozę z odpowiedzi modelu korektora.
+# KAN-223: kotwice fraz-preambuł i nagłówków „kolejnej wersji”. Linia META, którą realny model
+# (Bielik) dokleja przed właściwą prozą albo używa do rozdzielenia dwóch wariantów. Celowo
+# ZAMKNIĘTY zestaw fraz (nie „dowolna linia z dwukropkiem”), by NIE zjeść legalnego zdania prozy
+# typu „Zrobiliśmy trzy rzeczy:”.
+_PREAMBLE_ANCHOR_RE = re.compile(
+    r"^\s*(?:[#>*\-\s]*)?(?:\*\*\s*)?"
+    r"(?:poprawiona\s+wersja|poprawiony\s+akapit|poprawiona\s+proza"
+    r"|skorygowan[ay]\s+wersja|przepisan[ay](?:\s+akapit)?|wersja\s*\d*"
+    r"|alternatywnie|oto(?:\s+(?:poprawion[ay]|przepisan[ay]|nowa))?\b.*"
+    r"|here(?:'s| is)\b.*|corrected\s+version|rewritten(?:\s+version)?)"
+    r"\s*\*{0,2}\s*:?\s*$",
+    re.IGNORECASE,
+)
 
-    Zdejmuje opakowujące potrójne cudzysłowy / pojedyncze cudzysłowy / backticki i białe znaki.
-    PUSTA lub bezsensowna odpowiedź → zwraca `fallback` (= oryginalny segment), dzięki czemu pętla
-    korektora widzi BRAK POSTĘPU (nie psuje tekstu przy awarii modelu). Fail-safe: nigdy nie
-    zwracamy pustego napisu."""
+# Krótka linia META zakończona dwukropkiem (np. „Poprawiona wersja:”), opcjonalnie z markdownem
+# i pogrubieniem. Ograniczenie długości chroni przed zjedzeniem normalnego zdania prozy z
+# dwukropkiem (które zwykle jest dłuższe i nie jest samym wprowadzeniem).
+_SHORT_LABEL_RE = re.compile(r"^\s*(?:[#>*\-\s]*)?(?:\*\*\s*)?[^.!?]{1,48}:\s*\*{0,2}\s*$")
+
+
+def _is_preamble_line(line: str) -> bool:
+    """Czy linia jest meta-preambułą/nagłówkiem wersji (do odcięcia przed właściwą prozą).
+
+    Pasuje na: kotwicę fraz (poprawiona wersja, oto…, here is…, corrected version) ALBO krótką
+    linię-etykietę zakończoną dwukropkiem. Zwykłe zdanie prozy (z kropką/dłuższe) NIE pasuje."""
+    s = line.strip()
+    if not s:
+        return False
+    return bool(_PREAMBLE_ANCHOR_RE.match(s) or _SHORT_LABEL_RE.match(s))
+
+
+def _strip_preamble_and_extra_versions(text: str) -> str:
+    """Tnie meta-preambuły i wyłuskuje PIERWSZY zwarty akapit prozy.
+
+    Kroki:
+      1. Zdejmij z początku kolejne linie-preambuły (kotwica fraz / krótka etykieta z dwukropkiem),
+         dopóki PIERWSZA niepusta linia jest preambułą.
+      2. Podziel resztę po pustej linii na bloki; weź PIERWSZY niepusty blok (gdy model podał dwie
+         wersje rozdzielone pustą linią — bierzemy pierwszą).
+      3. Wewnątrz bloku utnij wszystko od pierwszej linii-preambuły nowej wersji (np. model wkleił
+         „Poprawiona wersja:” bez pustej linii przed drugim wariantem)."""
+    # 1. zdejmij wiodące preambuły (każda osobna linia)
+    lines = text.split("\n")
+    idx = 0
+    while idx < len(lines):
+        if lines[idx].strip() == "":
+            idx += 1  # pomiń puste linie nad preambułą
+            continue
+        if _is_preamble_line(lines[idx]):
+            idx += 1
+            continue
+        break
+    rest = "\n".join(lines[idx:]).strip()
+    if not rest:
+        return rest
+
+    # 2. pierwszy zwarty blok (akapit) — rozdziela pusta linia.
+    blocks = re.split(r"\n\s*\n", rest)
+    first = ""
+    for b in blocks:
+        if b.strip():
+            first = b
+            break
+
+    # 3. wewnątrz bloku utnij od pierwszej linii-preambuły nowej wersji (drugi wariant bez pustej
+    #    linii). Linię prozy zostawiamy; zatrzymujemy się na meta-nagłówku.
+    out_lines = []
+    for ln in first.split("\n"):
+        if out_lines and _is_preamble_line(ln):
+            break
+        out_lines.append(ln)
+    return "\n".join(out_lines).strip()
+
+
+def clean_rewrite_reply(content: str, fallback: str) -> str:
+    """Wyłuskuje czystą prozę z odpowiedzi modelu korektora (KAN-223: twardszy parser).
+
+    Realny model (Bielik Q4) bywa gadatliwy: dokleja komentarz („Poprawiona wersja:”, „Oto
+    poprawiony akapit:”) i podaje DWIE wersje. Parser radzi sobie z tym, zanim segment dostanie
+    tekst. Kolejność:
+      1. strip; pusto → fallback (oryginał).
+      2. Odetnij meta-preambuły/komentarze (linie-kotwice fraz oraz krótkie etykiety zakończone
+         dwukropkiem) z początku odpowiedzi.
+      3. Gdy model zwrócił WIELE wersji (rozdzielonych pustą linią lub nagłówkiem „Poprawiona
+         wersja:”), weź PIERWSZY zwarty akapit prozy.
+      4. Zdejmij opakowujące potrójne cudzysłowy / backtick-fence / pojedyncze cudzysłowy
+         (zachowane z poprzedniego zachowania — teraz NA KOŃCU, bo preambuła mogła być przed
+         cudzysłowem otwierającym).
+      5. Wynik pusty lub sama interpunkcja → fallback. Fail-safe: NIGDY nie zwracamy pustego.
+
+    Heurystyka cięcia jest ostrożna: kotwice to konkretne frazy META, a etykieta musi być krótką
+    linią z dwukropkiem — legalne zdanie prozy „Zrobiliśmy trzy rzeczy:” nie jest zjadane, bo nie
+    pasuje do kotwic, a jeśli to JEDYNA treść, zostaje zachowane (nie ucinamy ostatniej linii)."""
     text = (content or "").strip()
     if not text:
         return fallback
-    # zdejmij opakowujące potrójne cudzysłowy / backtick-fence
+
+    # 2-3. odetnij preambuły i wyłuskaj pierwszy akapit prozy.
+    text = _strip_preamble_and_extra_versions(text)
+    if not text:
+        return fallback
+
+    # 4. zdejmij opakowujące potrójne cudzysłowy / backtick-fence
     for fence in ('"""', "'''", "```"):
         if text.startswith(fence) and text.endswith(fence) and len(text) >= 2 * len(fence):
             text = text[len(fence):-len(fence)].strip()
     # zdejmij pojedyncze opakowujące cudzysłowy
     if len(text) >= 2 and text[0] in "\"'„“" and text[-1] in "\"'”“":
         text = text[1:-1].strip()
-    return text or fallback
+
+    # 5. fail-safe: pusto albo sama interpunkcja/białe znaki → fallback.
+    if not text or not re.search(r"\w", text):
+        return fallback
+    return text
 
 
 _JSON_BLOCK_RE = re.compile(r"\{.*\}", re.DOTALL)

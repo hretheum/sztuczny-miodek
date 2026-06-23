@@ -11,7 +11,12 @@ Komplement do `engines.schema.md` (silnik + zdolność rewrite) i `runner.schema
 1. AUDYT — `audit_fn(text, file_path) -> (manifest, doc)` (Stage 1 linter na bieżącym tekście) plus
    `run_stage2(manifest, engine, file_reader)` (Stage 2 osąd; bramka „PASS z uwagami to NIE PASS").
 2. POPRAWKA — dla każdego segmentu z werdyktem `rewrite`: `engine.rewrite(segment, judgement) -> str`
-   przepisuje sporny akapit. Zmiana ≠ oryginał staje się `adapter.Edit`.
+   przepisuje sporny akapit. STRAŻNIK REGRESJI (KAN-223): po przepisaniu tani audyt Stage 1 obu
+   wersji SAMEGO segmentu (`audit_fn(seg.text)` i `audit_fn(new_text)`, offline, bez sieci); poprawka
+   POGARSZAJĄCA (więcej trafień LUB nowy bloker, ostre nierówności `new_hits > old_hits or new_block
+   > old_block`) jest ODRZUCana — segment zostaje oryginałem, traktowany jak brak postępu. Tylko
+   nie-pogarszająca zmiana ≠ oryginał staje się `adapter.Edit`. Liczone są WSZYSTKIE trafienia (nie
+   tylko review), bo nowy manieryzm (np. dołożona półpauza) bywa blokerem spoza klasy review.
 3. ZŁOŻENIE — `OutputAdapter.write_back(doc, edits) -> str` (PlainText/Markdown przez
    `apply_edits_to_text`). NIE reimplementujemy składania.
 4. PONOWNY AUDYT — następna iteracja na poprawionym tekście.
@@ -26,6 +31,11 @@ Komplement do `engines.schema.md` (silnik + zdolność rewrite) i `runner.schema
 
 Po wyczerpaniu limitu pętla robi jeszcze jeden audyt: jeśli ostatni stan to PASS, `reason == "pass"`,
 `passed == True` (zbieżność dokładnie w ostatniej iteracji nie jest karana).
+
+Strażnik regresji a zbieżność: gdy żywy model dokłada manieryzm przy każdym przepisaniu, strażnik
+odrzuca wszystkie pogarszające poprawki, więc `poprawione == 0` i pętla kończy „brak postępu” —
+zamiast rozjeżdżać tekst do limitu. Granica jest ostra: zmiana NEUTRALNA (bez nowych trafień)
+przechodzi, więc realny postęp bez zbieżności nadal trafia na „limit iteracji”.
 
 ## Kontrakt zwrotu — `CorrectionResult`
 
