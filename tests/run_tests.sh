@@ -156,6 +156,13 @@ else
   echo "FAIL bramka przed publikacją — publish_gate przepuścił FAIL/gęstość, Stage 2 ze stubem nie jest surowszy niż F2, błąd silnika nie dał exit 2, albo README zgubił sekcję F3 (patrz wyżej)"; fail=1
 fi
 
+echo "== Korektor G2: petla audyt -> poprawka -> ponowny audyt do PASS (zbieznosc / brak postepu / limit) =="
+if python3 "$DIR/../tools/check_corrector.py"; then
+  : # OK — komunikat wypisuje sam skrypt
+else
+  echo "FAIL korektor G2 — petla nie zbiega do PASS na atrapie, nie zatrzymuje sie na braku postepu/limicie iteracji, zapis zwrotny rozjechal akapity albo kontrakt rewrite (domyslny no-op / atrapa korektora) pekl (patrz wyzej)"; fail=1
+fi
+
 if [[ $fail -eq 0 ]]; then
   echo "WSZYSTKIE TESTY PRZESZŁY."
 else

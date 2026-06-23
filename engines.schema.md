@@ -16,6 +16,28 @@ Realny silnik nadpisuje regułę atrapy faktyczną oceną modelu, zachowując te
 - `Judgement(verdict, notes, engine)`, `verdict ∈ {"pass", "rewrite"}` (walidacja w `__post_init__`).
 - Bramka „PASS z uwagami to NIE PASS": cokolwiek do ruchu => `"rewrite"`.
 
+## Zdolność `rewrite` (G2 — korektor)
+
+`JudgeEngine.rewrite(segment, judgement) -> str` to ROZSZERZENIE kontraktu (nie metoda abstrakcyjna):
+domyślna implementacja jest NO-OP (`return segment.text`), więc istniejące silniki tylko-osądzające
+(StubJudgeEngine, realne adaptery sprzed G2) nie pękają. Pętla korektora (`corrector.py`) traktuje
+zwrot równy oryginałowi jako BRAK POSTĘPU i zatrzymuje się, zamiast psuć tekst.
+
+- `StubRewriteEngine` (podklasa `StubJudgeEngine`) — atrapa KOREKTORA, deterministyczna, bez sieci.
+  `judge` dziedziczy (review → rewrite); `rewrite` przez `neutralize_match` usuwa KAŻDY wykryty
+  wzorzec tak, by ponowny audyt go nie łapał (triada „A, B i C” → „A i C”; antyteza „X, a nie Y” →
+  usunięcie spójnika; reszta → usunięcie dopasowanego fragmentu). Match nie do przypięcia →
+  tekst bez zmian (= brak postępu → STOP w pętli, nigdy nieskończona pętla). `StubJudgeEngine`
+  zostaje atrapą TYLKO-osądzającą (jej `rewrite` to no-op z bazy — testy G1 nietknięte).
+- `OpenAICompatEngine` / `OllamaEngine` — nadpisują `rewrite`: osobny prompt PO POLSKU
+  (`REWRITE_SYSTEM_PROMPT` + `build_rewrite_prompt(segment, judgement)`), `temperature: 0`, ta sama
+  koperta i wstrzykiwalny `transport` co `judge`. Odpowiedź czyści `clean_rewrite_reply(content,
+  fallback=segment.text)` (zdejmuje opakowujące cudzysłowy/backticki; pusta odpowiedź → oryginał, by
+  pętla widziała brak postępu, nie utratę treści).
+
+Pętla korektora woła silnik wyłącznie przez `judge` + `rewrite`; wybór i podmiana atrapy →
+`corrector.build_corrector_engine`. Szczegóły w `corrector.schema.md`.
+
 ## Dwa adaptery
 
 ### `OpenAICompatEngine` — dowolny endpoint zgodny z OpenAI Chat Completions
@@ -68,7 +90,7 @@ nigdy nie jest wołany.
   daje wciąż sensowny prompt — samą listę trafień.
 - `temperature: 0` — determinizm osądu sędziego.
 
-## Parsowanie odpowiedzi → `(verdict, notes)`
+## Parsowanie odpowiedzi na `(verdict, notes)`
 
 `parse_model_reply(content)` — deterministyczne, fail-safe domyślnie `rewrite` (bezpieczniej
 eskalować niż przepuścić tekst). Kolejność prób:

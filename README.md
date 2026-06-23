@@ -298,6 +298,22 @@ Gdy `manage: true` i silnik jest zdalny (`ollama`/`openai`), runner owija przebi
 
 Schematy: `metrics.schema.md` (redukcja, atrybucja, zdrowie), `runner.schema.md` (kontrakt orkiestracji), `engines.schema.md` (kontrakt realnych adapterów silnika), `runpod-lifecycle.schema.md` (auto-offload poda RunPod), `decision-log.schema.md` (wspólny strumień zdarzeń runnera i logu decyzji).
 
+## Korektor: pętla audyt, poprawka, ponowny audyt (G2)
+
+Dotąd skill tylko wytykał manieryzm. Korektor (`corrector.py`) zamyka pętlę nad linterem i osądem modelu, więc narzędzie samo doprowadza tekst do czysta. Jedna iteracja to audyt (Stage 1 plus osąd Stage 2), przepisanie spornych akapitów przez silnik, zapis zwrotny przez adapter i ponowny audyt na poprawionym tekście.
+
+Pętla zatrzymuje się w jednym z trzech przypadków. Pierwszy to PASS, czyli bramka Stage 2 nie zwraca już segmentów do przepisania. Drugi to brak postępu, gdy żadne przepisanie nie zmieniło tekstu w danej iteracji (ochrona przed pętlą bez końca). Trzeci to wyczerpanie limitu iteracji (domyślnie 4, konfigurowalne). Zwracany jest finalny tekst plus raport: liczba iteracji, czy osiągnięto PASS, powód zatrzymania, ślad ile segmentów poprawiono w każdej iteracji.
+
+Silnik jest wymienny przez ten sam interfejs co osąd Stage 2. Korektor woła go wyłącznie przez `judge` i `rewrite`. Domyślny silnik z configu (`stub`) daje deterministyczną atrapę offline (`StubRewriteEngine`), która neutralizuje wykryty wzorzec tak, by ponowny audyt go nie łapał, więc pętla zbiega bez sieci. Realny model (`openai`/`ollama`) wpina się bez zmiany pętli: dostaje osobny prompt po polsku „przepisz akapit usuwając manieryzm, zachowaj sens i rejestr".
+
+```bash
+python3 corrector.py --file artykul.md                 # silnik z config.json (stub = offline)
+python3 corrector.py --file artykul.md --in-place       # zapisz poprawiony tekst do pliku
+python3 corrector.py --file artykul.md --engine ollama  # korekta realnym modelem (sieć)
+```
+
+Finalny tekst leci na stdout, raport na stderr. Exit 0, gdy osiągnięto PASS, 1 w przeciwnym razie (gate-owalne). Kontrakt pętli, mapowanie segmentu na edycję i warunki zatrzymania opisuje `corrector.schema.md`; zdolność `rewrite` w silniku jest w `engines.schema.md`. Self-test offline: `tools/check_corrector.py` (wpięty do `tests/run_tests.sh`).
+
 ## Opcjonalna warstwa terminologii domenowej
 
 Skill obsługuje opcjonalny tryb z własnym słownikiem terminów branżowych. Jeśli posiadasz taki plik, terminy w nim zdefiniowane mają pierwszeństwo nad ogólnymi regułami dla swojej dziedziny. Bez słownika skill działa w trybie ogólnym: pełny audyt polszczyzny i manieryzmu AI. Słownik domenowy jest zewnętrzny i nie wchodzi w skład repozytorium.

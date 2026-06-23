@@ -99,6 +99,20 @@ class JudgeEngine(ABC):
         """Wydaje werdykt dla jednego segmentu review. Zwraca Judgement."""
         raise NotImplementedError
 
+    def rewrite(self, segment: ReviewSegment, judgement: Judgement) -> str:
+        """Przepisuje sporny segment, usuwając manieryzm (zdolność korektora, G2).
+
+        Domyślna implementacja jest NO-OP: zwraca `segment.text` bez zmian. To kontrakt
+        ROZSZERZAJĄCY (nie abstrakcyjny), więc istniejące silniki tylko-osądzające (StubJudgeEngine,
+        realne adaptery sprzed G2) nie pękają — dziedziczą no-op. Pętla korektora (corrector.py)
+        traktuje zwrot równy oryginałowi jako BRAK POSTĘPU i zatrzymuje się (ochrona przed pętlą
+        nieskończoną), zamiast psuć tekst.
+
+        Realny silnik (OpenAICompat/Ollama) NADPISUJE tę metodę wywołaniem modelu z promptem
+        przepisującym; atrapa korektora (StubRewriteEngine) — deterministyczną neutralizacją wzorca.
+        """
+        return segment.text
+
 
 class StubJudgeEngine(JudgeEngine):
     """Atrapa silnika: deterministyczna, bez LLM, bez sieci.
@@ -121,6 +135,81 @@ class StubJudgeEngine(JudgeEngine):
                 engine=self.name,
             )
         return Judgement(verdict="pass", notes="atrapa: brak trafień review", engine=self.name)
+
+
+# Spójniki, które przy usuwaniu antytezy „X, a nie Y" znikają wraz z dopasowanym fragmentem.
+# Detektor PL-ANTI zwraca match w rodzaju „, a nie" / „, nie" / „a nie" — usunięcie match z tekstu
+# rozspaja antytezę, więc ponowny audyt jej nie złapie. Zostawiamy oba człony obok siebie.
+_TRIADA_TAIL_RE = re.compile(
+    r"^(?P<a>.+?)(?P<sep1>,\s*)(?P<b>.+?)(?P<sep2>\s+i\s+|\s+oraz\s+|\s+and\s+)(?P<c>.+)$",
+    re.DOTALL,
+)
+
+
+def neutralize_match(text: str, hit: dict) -> str:
+    """Deterministycznie neutralizuje JEDEN wykryty wzorzec w `text` tak, by ponowny audyt go nie
+    łapał. Strategia regułowa per rodzaj manieryzmu (atrapa korektora, bez sieci, bez modelu):
+
+      - triada „A, B i C" (PL-RHET / EN-TRIAD review): skróć do DWÓCH członów „A i C" (audyt triady
+        wymaga trzech — po skróceniu nie trafia),
+      - antyteza „X, a nie Y" (PL-ANTI / EN-ANTI): usuń dopasowany spójnik (np. „, a nie") —
+        rozspaja konstrukcję, audyt PL-ANTI jej nie widzi,
+      - pozostałe (signpost, superlatyw, nadmiar myślników): usuń dopasowany fragment match
+        (z normalizacją spacji wokół miejsca cięcia).
+
+    Bezpieczeństwo zbieżności: działamy WYŁĄCZNIE na pierwszym wystąpieniu `hit["match"]` jako
+    podłańcucha `text`. Gdy match nie jest podłańcuchem (np. przycięty „…" albo z innego pliku),
+    zwracamy `text` BEZ ZMIAN — pętla korektora wykryje brak postępu i zatrzyma się, nigdy nie
+    zapętli się w nieskończoność.
+    """
+    match = (hit or {}).get("match", "") or ""
+    mid = (hit or {}).get("id", "") or ""
+    if not match or match not in text:
+        return text  # nie da się przypiąć dopasowania → brak postępu (świadomy STOP w pętli)
+
+    i = text.index(match)
+    before, after = text[:i], text[i + len(match):]
+
+    # 1) Triada: spróbuj rozłożyć match na trzy człony i zostawić dwa.
+    m = _TRIADA_TAIL_RE.match(match)
+    if m and ("RHET" in mid or "TRIAD" in mid):
+        replacement = f"{m.group('a').strip()}{m.group('sep2').rstrip()} {m.group('c').strip()}"
+        replacement = re.sub(r"\s+", " ", replacement).strip()
+        return before + replacement + after
+
+    # 2) Antyteza: usuń sam spójnik (match to „, a nie" / „a nie" / „, nie"). Sklej człony spacją.
+    if "ANTI" in mid:
+        joined = (before.rstrip() + " " + after.lstrip()).strip()
+        return re.sub(r"[ \t]{2,}", " ", joined)
+
+    # 3) Reszta: usuń dopasowany fragment, znormalizuj spacje wokół cięcia.
+    joined = before.rstrip() + ("" if (not after or after[:1] in ".,;:!?") else " ") + after.lstrip()
+    joined = re.sub(r"[ \t]{2,}", " ", joined).strip()
+    # Wielka litera na początku, jeśli usunęliśmy fragment otwierający zdanie.
+    if joined and before.strip() == "" and joined[:1].islower():
+        joined = joined[:1].upper() + joined[1:]
+    return joined
+
+
+class StubRewriteEngine(StubJudgeEngine):
+    """Atrapa KOREKTORA (G2): osądza jak `StubJudgeEngine`, ale UMIE deterministycznie przepisać.
+
+    `judge` dziedziczy z bazy (≥1 hit review => "rewrite"). `rewrite` neutralizuje KAŻDE trafienie
+    review w segmencie przez `neutralize_match`, tak by ponowny audyt już go nie łapał — dzięki temu
+    pętla korektora ZBIEGA do PASS bez sieci i bez modelu. Gdy żadnego match nie da się przypiąć,
+    `rewrite` zwraca tekst bez zmian (= brak postępu → pętla się zatrzymuje, nie zapętla).
+
+    To rozdziela odpowiedzialności: `StubJudgeEngine` zostaje atrapą TYLKO-osądzającą (jej `rewrite`
+    to no-op z bazy, więc testy G1 są nietknięte), a `StubRewriteEngine` jest atrapą korektora G2.
+    """
+
+    name = "stub-rewrite"
+
+    def rewrite(self, segment: ReviewSegment, judgement: Judgement) -> str:
+        text = segment.text
+        for hit in segment.hits:
+            text = neutralize_match(text, hit)
+        return text
 
 
 # ============================================================================
@@ -148,6 +237,17 @@ JUDGE_SYSTEM_PROMPT = (
 
 # Notatka fallback: odpowiedź modelu niejednoznaczna => eskalacja do rewrite (zachowawczo).
 _FALLBACK_NOTES = "niejednoznaczna odpowiedź modelu; eskalacja do rewrite (fail-safe)"
+
+# System prompt KOREKTORA (G2). Osobny od JUDGE_SYSTEM_PROMPT: tu model nie ocenia, lecz przepisuje.
+# Twarde wymaganie: zwróć WYŁĄCZNIE poprawioną prozę (bez komentarza, bez cudzysłowów), zachowaj sens,
+# fakty i rejestr — usuń tylko manieryzm AI.
+REWRITE_SYSTEM_PROMPT = (
+    "Jesteś redaktorem polszczyzny. Dostajesz JEDEN akapit oznaczony przez linter jako manieryzm AI "
+    "(triady „A, B i C”, antytezy „X, a nie Y”, puste superlatywy, nadmiar myślników, signposty). "
+    "Przepisz ten akapit, USUWAJĄC manieryzm, ale ZACHOWUJĄC sens, fakty, rejestr i język oryginału. "
+    "Nie skracaj treści merytorycznej, nie dodawaj nowych myśli. "
+    "Zwróć WYŁĄCZNIE poprawioną prozę: bez komentarza, bez wyjaśnień, bez cudzysłowów, bez opakowania."
+)
 
 # KAN-221: domyślny User-Agent. Proxy RunPoda (proxy.runpod.net) zwraca 403 Forbidden dla
 # domyślnego UA urllib (Python-urllib), a przepuszcza klienta z jawnym UA. Oba adaptery wysyłają
@@ -187,6 +287,42 @@ def build_judge_prompt(segment: ReviewSegment) -> str:
         lines.append("Linter nie podał szczegółowych trafień; oceń akapit całościowo.")
     lines.append("Oceń, czy akapit wymaga przepisania.")
     return "\n".join(lines)
+
+
+def build_rewrite_prompt(segment: ReviewSegment, judgement: Judgement) -> str:
+    """Buduje user-message KOREKTORA (G2) PO POLSKU z segment.text, trafień i notatek osądu.
+
+    Podajemy modelowi co linter zaznaczył (ID + fragment) oraz uzasadnienie osądu (judgement.notes),
+    żeby wiedział, CO usunąć. Prosimy o samą poprawioną prozę (egzekwowane też w system prompt)."""
+    lines = ["Akapit do przepisania:", '"""', segment.text or "", '"""']
+    if segment.hits:
+        lines.append("Linter oznaczył w nim manieryzm (ID + dopasowany fragment):")
+        for h in segment.hits:
+            lines.append(f"- {h.get('id', '?')}: \"{h.get('match', '')}\"")
+    if judgement is not None and getattr(judgement, "notes", ""):
+        lines.append(f"Uwaga sędziego: {judgement.notes}")
+    lines.append("Przepisz akapit bez manieryzmu. Zwróć WYŁĄCZNIE poprawioną prozę.")
+    return "\n".join(lines)
+
+
+def clean_rewrite_reply(content: str, fallback: str) -> str:
+    """Wyłuskuje czystą prozę z odpowiedzi modelu korektora.
+
+    Zdejmuje opakowujące potrójne cudzysłowy / pojedyncze cudzysłowy / backticki i białe znaki.
+    PUSTA lub bezsensowna odpowiedź → zwraca `fallback` (= oryginalny segment), dzięki czemu pętla
+    korektora widzi BRAK POSTĘPU (nie psuje tekstu przy awarii modelu). Fail-safe: nigdy nie
+    zwracamy pustego napisu."""
+    text = (content or "").strip()
+    if not text:
+        return fallback
+    # zdejmij opakowujące potrójne cudzysłowy / backtick-fence
+    for fence in ('"""', "'''", "```"):
+        if text.startswith(fence) and text.endswith(fence) and len(text) >= 2 * len(fence):
+            text = text[len(fence):-len(fence)].strip()
+    # zdejmij pojedyncze opakowujące cudzysłowy
+    if len(text) >= 2 and text[0] in "\"'„“" and text[-1] in "\"'”“":
+        text = text[1:-1].strip()
+    return text or fallback
 
 
 _JSON_BLOCK_RE = re.compile(r"\{.*\}", re.DOTALL)
@@ -298,6 +434,26 @@ class OpenAICompatEngine(JudgeEngine):
         verdict, notes = parse_model_reply(content)
         return Judgement(verdict=verdict, notes=notes, engine=self.name)
 
+    def rewrite(self, segment: ReviewSegment, judgement: Judgement) -> str:
+        """G2: woła model promptem przepisującym; zwraca poprawioną prozę. Pusta/awaryjna
+        odpowiedź → oryginał (fallback), by pętla widziała brak postępu zamiast utraty treści."""
+        url = self.base_url + "/chat/completions"
+        body = {
+            "model": self.model,
+            "temperature": 0,
+            "messages": [
+                {"role": "system", "content": REWRITE_SYSTEM_PROMPT},
+                {"role": "user", "content": build_rewrite_prompt(segment, judgement)},
+            ],
+        }
+        headers = {"Content-Type": "application/json", "User-Agent": USER_AGENT, **self._extra_headers}
+        if self._api_key:
+            headers["Authorization"] = f"Bearer {self._api_key}"
+        raw = self._transport(
+            url, data=json.dumps(body).encode("utf-8"), headers=headers, timeout=self._timeout
+        )
+        return clean_rewrite_reply(_extract_openai_content(raw), fallback=segment.text)
+
 
 class OllamaEngine(JudgeEngine):
     """Adapter Ollamy po HTTP (POST /api/chat, stream=false) — lokalnej i zdalnej (RunPod).
@@ -333,3 +489,23 @@ class OllamaEngine(JudgeEngine):
         content = _extract_ollama_content(raw)
         verdict, notes = parse_model_reply(content)
         return Judgement(verdict=verdict, notes=notes, engine=self.name)
+
+    def rewrite(self, segment: ReviewSegment, judgement: Judgement) -> str:
+        """G2: woła model (POST /api/chat) promptem przepisującym; zwraca poprawioną prozę.
+        Pusta/awaryjna odpowiedź → oryginał (fallback), by pętla widziała brak postępu."""
+        url = self.base_url + "/api/chat"
+        body = {
+            "model": self.model,
+            "stream": False,
+            "options": {"temperature": 0},
+            "messages": [
+                {"role": "system", "content": REWRITE_SYSTEM_PROMPT},
+                {"role": "user", "content": build_rewrite_prompt(segment, judgement)},
+            ],
+        }
+        raw = self._transport(
+            url, data=json.dumps(body).encode("utf-8"),
+            headers={"Content-Type": "application/json", "User-Agent": USER_AGENT},
+            timeout=self._timeout,
+        )
+        return clean_rewrite_reply(_extract_ollama_content(raw), fallback=segment.text)
