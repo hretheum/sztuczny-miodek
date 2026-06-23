@@ -1,0 +1,27 @@
+tools/check_metrics.py
+  s_b76104c517d6dd::t_c03bc19f0a3f78 1-116
+metrics.schema.md
+  s_b76104c517d6dd::t_f57a6332adafd8 1-106
+metrics.py
+  s_b76104c517d6dd::t_309c461b121b95 1-195
+tools/measure_reduction.py
+  s_b76104c517d6dd::t_208adbebbed2e2 1-91
+tests/run_tests.sh
+  s_b76104c517d6dd::t_1d5fad50030850 101-107
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.10",
+  "base_commit_sha": "40b32a9849df585eb3e881d3ad73c3ea5ce5224f",
+  "prompts": {},
+  "sessions": {
+    "s_b76104c517d6dd": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9e3d791c-79b1-4b59-a006-630c18864e71",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Eryk Orłowski <eryk@talentcanvas.tech>"
+    }
+  }
+}
