@@ -51,6 +51,24 @@ Wywołanie: `/sztuczny-miodek:sztuczny-miodek`. Aktualizacja: `/plugin update sz
 
 Oba tryby korzystają z tego samego `SKILL.md` w korzeniu repo. Katalog `.claude-plugin/` jest używany tylko w trybie B.
 
+### Tryb C — CLI przez uvx
+
+Narzędzie linii poleceń `miodek` można uruchomić bez ręcznej instalacji, wprost ze źródła git. Wymaga [uv](https://docs.astral.sh/uv/). Źródłem jest fork roboczy (paczka żyje na gałęzi `epic-a-reguly-jako-dane`, docelowo trafi do upstreamu):
+
+```bash
+uvx --from git+https://github.com/hretheum/sztuczny-miodek@epic-a-reguly-jako-dane \
+  miodek lint --lang both ŚCIEŻKA_DO_PLIKU.md
+```
+
+Polecenie `miodek` to dispatcher z podkomendami `lint`, `correct`, `gate`, `lt`. Eksporter metryk Prometheus jest osobnym poleceniem `miodek-exporter`:
+
+```bash
+uvx --from git+https://github.com/hretheum/sztuczny-miodek@epic-a-reguly-jako-dane \
+  miodek-exporter --help
+```
+
+Rdzeń nie ma żadnych zależności (sama biblioteka standardowa). Warstwy opcjonalne wydzielają extras `[exporter]` i `[lt]`. Są one dziś puste, bo wszystkie komponenty działają na bibliotece standardowej, więc instalacja z extra (`uv tool install "sztuczny-miodek[exporter] @ git+https://github.com/hretheum/sztuczny-miodek@epic-a-reguly-jako-dane"`) daje na razie ten sam wynik co bez niego. Powiązanie z homelabem (quadlet, systemd) zostaje poza paczką, deklaratywnie w repozytorium infrastruktury.
+
 ## Użycie
 
 ### W Claude Code
@@ -66,11 +84,13 @@ Claude przeprowadzi pełny protokół: pre-scan linterem, osąd kontekstowy, kor
 
 ### Linter z linii poleceń
 
-Pre-scan można uruchomić samodzielnie:
+Pre-scan można uruchomić samodzielnie podkomendą `lint`:
 
 ```bash
-python3 ai_linter.py --lang both ŚCIEŻKA_DO_PLIKU.md
+miodek lint --lang both ŚCIEŻKA_DO_PLIKU.md
 ```
+
+Po instalacji przez uvx (Tryb C) zadziała też bez klonu repo. Z klonu repo, bez instalacji, ten sam linter uruchomisz przez `python3 -m miodek.ai_linter --lang both ŚCIEŻKA_DO_PLIKU.md` (z `PYTHONPATH=src`).
 
 Flaga `--lang` przyjmuje `pl`, `en` lub `both`. Można podać kilka ścieżek naraz.
 
@@ -213,7 +233,7 @@ Linter zdejmuje pracę z modelu. Ile dokładnie, da się zmierzyć z samego mani
 Najpierw zbuduj manifest maszynowy, potem przepuść go przez narzędzie:
 
 ```bash
-python3 ai_linter.py --format json *.md > manifest.json
+miodek lint --format json *.md > manifest.json
 ```
 
 **Współczynnik redukcji (`tools/measure_reduction.py`).** Udział treści wejścia, której model NIE tyka. Treść routowana do Stage 2 to akapity z trafieniem klasy `review`. Punkt odniesienia z praktyki autora po wprowadzeniu lintera: routed rzędu 4 do 5 procent.

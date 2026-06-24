@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""
+r"""
 metrics.py — miary ekonomii i obserwowalności liczone z MANIFESTU (Stage 1), bez kosztu tokenów.
 
 Granica między etapami to manifest JSON lintera (`ai_linter --format json`):

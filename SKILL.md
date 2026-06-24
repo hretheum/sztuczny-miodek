@@ -367,6 +367,7 @@ Zgodny z regułą dwustopniowości: deterministyczny pre-scan, potem osąd konte
 python3 ~/.claude/skills/sztuczny-miodek/ai_linter.py --lang both ŚCIEŻKA…
 # wyjście: plik:linia:ID:KLASA:fragment  +  blok == SUMMARY ==
 ```
+Przy instalacji CLI (uvx, paczka `miodek`) równoważne wywołanie to `miodek lint --lang both ŚCIEŻKA…`, a z klonu repo `python3 -m miodek.ai_linter --lang both ŚCIEŻKA…` (z `PYTHONPATH=src`).
 Manifest = mapa podejrzeń. Linter łapie szeroko (wysoki recall), świadomie dopuszcza
 false-positives w klasie `review` — to zadanie Stage 2, nie powód, by mu nie ufać.
 
@@ -652,7 +653,7 @@ Liczba błędów: 25 | Krytycznych: 1 (cyrylica) | Kolokacje: 3 | Interpunkcja: 
 
 ## 10. Checklist Audytu
 
-- [ ] **Faza 0 — pre-scan linterem** (`python3 ai_linter.py --lang both …` → manifest)
+- [ ] **Faza 0 — pre-scan linterem** (`miodek lint --lang both …` lub `python3 ai_linter.py --lang both …` → manifest)
 - [ ] Skanowanie cyrylicy (regex `[А-Яа-яЁё]`)
 - [ ] Skanowanie kalek angielskich (lista 29 słów kluczowych)
 - [ ] Skanowanie fałszywych przyjaciół (13 wzorców)
