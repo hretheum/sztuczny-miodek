@@ -56,13 +56,12 @@ Zasada Miodka: poprawiaj to, co ma polski odpowiednik; zachowuj to, co przyjęł
 
 ## Kluczowe funkcje
 
-**Deterministyczny linter `ai_linter.py` (Stage 1).** Pre-scan bez kosztu tokenów LLM. Generuje manifest podejrzeń w formacie `plik:linia:ID:KLASA:fragment` plus blok `== SUMMARY ==` z liczbą słów, trafień, maksymalną liczbą myślników na akapit, gęstością i werdyktem. Linter łapie szeroko (wysoki recall), świadomie dopuszcza false-positives w klasie `review`. Wyłącznie biblioteka standardowa Pythona 3, zero zależności pip.
+- **Deterministyczny linter (Stage 1).** Wykrywa manieryzm bez kosztu tokenów LLM, na samej bibliotece standardowej Pythona. Łapie szeroko, a niepewne trafienia oznacza do przeglądu.
+- **Opcjonalny osąd modelu (Stage 2).** Rozstrzyga niepewne trafienia w kontekście całego zdania i nanosi poprawkę tylko tam, gdzie trzeba.
+- **Kanon manieryzmu PL i EN.** Czternaście kategorii ze wspólnym źródłem w `manieryzm-ai.md`, każda z odpowiednikiem w linterze.
+- **Pełny audyt polszczyzny.** Priorytety od cyrylicy po typografię, wedle pragmatycznego puryzmu Jana Miodka (szczegóły w `SKILL.md`).
 
-**Osąd kontekstowy (Stage 2).** Dla każdego trafienia z manifestu: przeczytaj pełne zdanie, rozstrzygnij czy to realny manieryzm czy uzasadnienie kontekstowe, nanieś poprawkę, zweryfikuj kolokację po zamianie, wystaw werdykt. Wzorzec manifest → celowany Edit oszczędza około 60% tokenów względem czytania całych plików.
-
-**Kanon 14 kategorii manieryzmu (`manieryzm-ai.md`).** Źródło prawdy taksonomii. Każde ID kategorii ma odpowiednik w linterze. Kategorie PL: PL-SIGN, PL-CLICHE, PL-RHET, PL-RHYTHM, PL-HEDGE, PL-TYPO. Kategorie EN: EN-DASH, EN-ANTI, EN-TRIAD, EN-PARA, EN-CLICHE, EN-HEDGE, EN-SUPER, EN-CONCL.
-
-**Priorytety 1–10 (`SKILL.md`).** Ranking wykrywania błędów polszczyzny, od cyrylicy (Priorytet 1) przez sztuczne kolokacje (Priorytet 5, „najczęściej przeoczana kategoria”) i interpunkcję (Priorytet 6) po typografię (Priorytet 10). Każdy priorytet ma tabelę wzorców z poprawkami i regexami skanowania.
+Format manifestu i czytanie werdyktu opisuje sekcja [Interpretacja manifestu i werdyktu](#interpretacja-manifestu-i-werdyktu).
 
 ## Instalacja
 
