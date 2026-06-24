@@ -17,8 +17,19 @@ classifiers = [
     "Natural Language :: Polish",
     "Topic :: Text Processing :: Linguistic",
 ]
-# Rdzeń zero-dep (tylko biblioteka standardowa). Cięższe elementy jako extras dołoży KAN-229.
+# Rdzeń zero-dep: lint/correct/gate/lt ORAZ eksporter działają wyłącznie na bibliotece standardowej.
 dependencies = []
+
+# Extras (KAN-229). Świadoma decyzja: wszystkie komponenty są dziś zero-dep, więc extras NIE dociągają
+# żadnych pakietów — to placeholdery na PRZYSZŁE opcjonalne zależności, jawnie wydzielające warstwy:
+#   exporter — eksporter metryk Prometheus (polecenie `miodek-exporter`). Dziś zero-dep (format
+#              generowany ręcznie, serwer z http.server); tu trafiłby np. klient metryk, gdyby był.
+#   lt       — integracja LanguageTool (`miodek lt`). Klient zero-dep (urllib); sam serwer LanguageTool
+#              stoi osobno (Docker/lokalnie), POZA paczką; tu trafiłby ewentualny lokalny backend.
+# „mbair-wiring" (quadlet/systemd/runbook obserwowalności) celowo zostaje poza dystrybucją.
+[project.optional-dependencies]
+exporter = []
+lt = []
 
 [project.urls]
 Homepage = "https://github.com/researchanddeploy/sztuczny-miodek"
@@ -26,6 +37,13 @@ Homepage = "https://github.com/researchanddeploy/sztuczny-miodek"
 [project.scripts]
 # Unified CLI (KAN-228): dispatcher z podkomendami miodek lint / correct / gate / lt.
 miodek = "miodek.cli:main"
+# Eksporter metryk Prometheus jako osobne polecenie (KAN-229) — opcjonalny, oddzielony od głównego
+# CLI; dla obserwowalności (np. homelab). Zero-dep; deploy przez quadlet/systemd montuje repo.
+# TODO (gdy extra [exporter] dostanie realną zależność): to polecenie jest widoczne też po instalacji
+# BEZ [exporter] (entry pointów nie da się uzależnić od extra). Wtedy dodaj w metrics_exporter.main()
+# strażnika importu brakującej zależności z przyjaznym komunikatem „doinstaluj miodek[exporter]",
+# zamiast pozwolić na surowy ImportError przy pierwszym użyciu.
+miodek-exporter = "miodek.metrics_exporter:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/miodek"]

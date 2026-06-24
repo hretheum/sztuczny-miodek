@@ -22,6 +22,9 @@ Volume=%h/miodek-corpus:/corpus:ro,Z
 Environment=MIODEK_CORPUS=/corpus
 Environment=MIODEK_PORT=9112
 Environment=MIODEK_LOG=/app/decisions.jsonl
+# Eksporter żyje w pakiecie miodek (src/). Shim tools/metrics_exporter.py sam dokłada /app/src,
+# ale ustawiamy też PYTHONPATH jako zabezpieczenie — wymaga pełnego klonu repo z katalogiem src/.
+Environment=PYTHONPATH=/app/src
 Exec=python3 /app/tools/metrics_exporter.py --port 9112 --corpus /corpus
 
 [Service]

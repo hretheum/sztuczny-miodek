@@ -32,7 +32,7 @@ if REPO_ROOT not in sys.path:
     sys.path.insert(0, os.path.join(REPO_ROOT, "src"))
 
 from miodek import metrics  # noqa: E402
-import metrics_exporter as mx  # noqa: E402
+from miodek import metrics_exporter as mx  # noqa: E402 — eksporter w pakiecie (KAN-229)
 
 
 # --- Ustalony manifest w pamięci (ten sam wzorzec co check_metrics.py) ---
