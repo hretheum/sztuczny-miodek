@@ -100,7 +100,7 @@ Narzędzie linii poleceń `miodek` można uruchomić bez ręcznej instalacji. Wy
 uvx miodek lint --lang both ŚCIEŻKA_DO_PLIKU.md
 ```
 
-`uvx` pobiera paczkę do cache i uruchamia ulotnie, bez instalowania niczego na stałe. Polecenie `miodek` to dispatcher z podkomendami `lint`, `correct`, `gate`, `lt`. Eksporter metryk Prometheus jest osobnym poleceniem `miodek-exporter`:
+`uvx` pobiera paczkę do cache i uruchamia ulotnie, bez instalowania niczego na stałe. Polecenie `miodek` to dispatcher z podkomendami `lint`, `correct`, `gate`, `lt` oraz `build-dict`. Eksporter metryk Prometheus jest osobnym poleceniem `miodek-exporter`:
 
 ```bash
 uvx --from miodek miodek-exporter --help
@@ -119,6 +119,7 @@ Co daje tryb C, czego nie ma czysty skill z trybów A i B:
 - batch na całych katalogach i wzorcach glob z jednym zbiorczym kodem wyjścia (audyt dużych wolumenów);
 - trzy bramki jakości jako kroki automatyzacji: przy zapisie, na merge request, przed publikacją;
 - osąd modelu Stage 2 z routingiem silników oraz korektor doprowadzający tekst do werdyktu PASS;
+- budowa słownika domenowego z własnego korpusu podkomendą `miodek build-dict`;
 - eksporter metryk Prometheus jako osobne polecenie `miodek-exporter`.
 
 Tryby A i B zostają najlepsze do pracy w rozmowie z Claude Code; tryb C jest do skryptów, CI i hooków gita.
