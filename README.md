@@ -2,6 +2,45 @@
 
 Skill Claude Code do audytu polszczyzny i eradykacji manieryzmu AI (AI-tellów) w tekstach polskich i angielskich. Metodologia: pragmatyczny puryzm Jana Miodka.
 
+> **Ten projekt to fork.** Rdzeń pochodzi od Tomasza Jakubowskiego, z oryginalnego repozytorium [researchanddeploy/sztuczny-miodek](https://github.com/researchanddeploy/sztuczny-miodek): deterministyczny linter Stage 1, kanon manieryzmu, metodologia Miodka, instalacja jako skill Claude Code oraz słownik domenowy.
+
+Fork rozwija narzędzie o kolejne warstwy:
+
+- CLI przez `uvx` z ujednoliconym poleceniem `miodek`,
+- trzy bramki jakości: przy zapisie pliku, na merge request, przed publikacją,
+- korektor zamykający pętlę audytu do werdyktu PASS,
+- osąd modelu Stage 2 z routingiem silników i lejkiem kosztowym,
+- ekonomię i obserwowalność: metryki z manifestu oraz eksporter Prometheus,
+- integrację LanguageTool na żądanie.
+
+## Spis treści
+
+- [Co robi](#co-robi)
+- [Kluczowe funkcje](#kluczowe-funkcje)
+- [Instalacja](#instalacja)
+  - [Tryb A — bezpośredni clone (skill)](#tryb-a--bezpośredni-clone-skill)
+  - [Tryb B — plugin przez marketplace](#tryb-b--plugin-przez-marketplace)
+  - [Tryb C — CLI przez uvx](#tryb-c--cli-przez-uvx)
+- [Użycie](#użycie)
+  - [W Claude Code](#w-claude-code)
+  - [Linter z linii poleceń](#linter-z-linii-poleceń)
+  - [Interpretacja manifestu i werdyktu](#interpretacja-manifestu-i-werdyktu)
+- [Bramka write-time (hook na zapisie pliku)](#bramka-write-time-hook-na-zapisie-pliku)
+  - [Włączenie hooka w pluginie (opt-in)](#włączenie-hooka-w-pluginie-opt-in)
+  - [Użycie jako git pre-commit](#użycie-jako-git-pre-commit)
+- [Bramka CI na merge request](#bramka-ci-na-merge-request)
+- [Bramka przed publikacją](#bramka-przed-publikacją)
+- [Testy](#testy)
+- [Ekonomia i obserwowalność (metryki z manifestu)](#ekonomia-i-obserwowalność-metryki-z-manifestu)
+  - [Eksporter metryk Prometheus i dashboard Grafany](#eksporter-metryk-prometheus-i-dashboard-grafany)
+  - [Auto-offload poda RunPod po przebiegu Stage 2](#auto-offload-poda-runpod-po-przebiegu-stage-2)
+  - [Efemeryczny pod jednym krokiem: flaga `--runpod`](#efemeryczny-pod-jednym-krokiem-flaga---runpod)
+  - [Routing silnika: lejek kosztowy](#routing-silnika-lejek-kosztowy)
+- [Korektor: pętla audyt, poprawka, ponowny audyt](#korektor-pętla-audyt-poprawka-ponowny-audyt)
+- [LanguageTool: pełna korekta polszczyzny na żądanie](#languagetool-pełna-korekta-polszczyzny-na-żądanie)
+- [Opcjonalna warstwa terminologii domenowej](#opcjonalna-warstwa-terminologii-domenowej)
+- [Atrybucja i licencja](#atrybucja-i-licencja)
+
 ## Co robi
 
 Skill realizuje dwie misje:
