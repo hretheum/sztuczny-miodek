@@ -45,6 +45,13 @@ else
   echo "FAIL resources — dane pakietu nie idą przez jeden punkt (resources.packaged_data_path), ai_linter/config rozjechały podłączenie albo nieznany plik nie daje błędu (patrz wyżej)"; fail=1
 fi
 
+echo "== Agregat batch: flaga --report, blok == BATCH ==, klucz JSON batch (KAN-231) =="
+if python3 "$DIR/../tools/check_batch.py"; then
+  : # OK — komunikat wypisuje sam skrypt
+else
+  echo "FAIL batch — --report nie daje bloku == BATCH ==, psuje wyjście bez flagi albo struktura JSON 'batch' się rozjechała (patrz wyżej)"; fail=1
+fi
+
 echo "== Spójność ID: rules.json == linter == manieryzm-ai.md (A4) =="
 if python3 "$DIR/../tools/check_id_consistency.py"; then
   : # OK — komunikat wypisuje sam skrypt

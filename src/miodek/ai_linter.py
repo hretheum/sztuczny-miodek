@@ -641,7 +641,10 @@ def compute_batch(all_hits: List[Hit], summaries: List[FileSummary]) -> dict:
             {"file": s.file, "blockers": s.blockers, "density": s.density, "verdict": s.verdict}
             for s in problem
         ],
-        "top_rules": sorted(by_rule.items(), key=lambda kv: kv[1], reverse=True),
+        "top_rules": [
+            {"rule": mid, "count": cnt}
+            for mid, cnt in sorted(by_rule.items(), key=lambda kv: kv[1], reverse=True)
+        ],
     }
 
 
@@ -664,8 +667,8 @@ def format_batch_report(agg: dict, top_n: int = 10) -> str:
     if agg["top_rules"]:
         lines.append("")
         lines.append(f"najczęstsze reguły (do {top_n}):")
-        for mid, cnt in agg["top_rules"][:top_n]:
-            lines.append(f"  {mid}: {cnt}")
+        for item in agg["top_rules"][:top_n]:
+            lines.append(f"  {item['rule']}: {item['count']}")
     return "\n".join(lines)
 
 
