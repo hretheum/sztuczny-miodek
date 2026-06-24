@@ -8,6 +8,7 @@ pakietu, zachowując jego kod wyjścia. Zastępuje prowizoryczny entry point z K
   gate     Bramka przed publikacją (Stage 1 zawsze, opcjonalnie Stage 2 --stage2).  -> publish_gate.main
   lt       Pełna korekta przez LanguageTool (na żądanie, wymaga endpointu).         -> languagetool_check.main
   build-dict  Buduje szkic słownika domenowego z korpusu (D3).                      -> build_dict.main
+  confluence  Audyt prozy stron Confluence przez adapter (read-only: pull).          -> confluence.main
 
 Delegacja: podkomendy mają własne parsery argparse — podmieniamy sys.argv tak, by widziały
 wyłącznie swoje argumenty. Kody wyjścia ujednolicamy (część modułów woła sys.exit, część zwraca
@@ -30,11 +31,12 @@ Komendy:
   lt        Pełna korekta przez LanguageTool (na żądanie; wymaga endpointu).
   build-dict  Buduje szkic słownika domenowego z korpusu (częstość proponuje,
             kanon wetuje, człowiek zatwierdza); szkic do --dict w `miodek lint`.
+  confluence  Audyt prozy stron Confluence przez adapter (read-only): `miodek confluence pull`.
 
 Pomoc podkomendy:  miodek <komenda> --help
 """
 
-_COMMANDS = ("lint", "correct", "gate", "lt", "build-dict")
+_COMMANDS = ("lint", "correct", "gate", "lt", "build-dict", "confluence")
 
 
 def _delegate(loader, rest):
@@ -93,6 +95,10 @@ def main(argv=None):
         def load():
             from miodek import build_dict
             return build_dict.main
+    elif cmd == "confluence":
+        def load():
+            from miodek import confluence
+            return confluence.main
 
     return _delegate(load, rest)
 

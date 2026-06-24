@@ -52,6 +52,13 @@ else
   echo "FAIL batch — --report nie daje bloku == BATCH ==, psuje wyjście bez flagi albo struktura JSON 'batch' się rozjechała (patrz wyżej)"; fail=1
 fi
 
+echo "== Confluence: connector (env, atrapa transportu) + adapter pomija makra (KAN-233) =="
+if python3 "$DIR/../tools/check_confluence.py"; then
+  : # OK — komunikat wypisuje sam skrypt
+else
+  echo "FAIL confluence — connector łączy się bez konfiguracji, parse storage się rozjechał albo adapter nie pomija makr ac:/ri: (patrz wyżej)"; fail=1
+fi
+
 echo "== Spójność ID: rules.json == linter == manieryzm-ai.md (A4) =="
 if python3 "$DIR/../tools/check_id_consistency.py"; then
   : # OK — komunikat wypisuje sam skrypt

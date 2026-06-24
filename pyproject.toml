@@ -26,10 +26,13 @@ dependencies = []
 #              generowany ręcznie, serwer z http.server); tu trafiłby np. klient metryk, gdyby był.
 #   lt       — integracja LanguageTool (`miodek lt`). Klient zero-dep (urllib); sam serwer LanguageTool
 #              stoi osobno (Docker/lokalnie), POZA paczką; tu trafiłby ewentualny lokalny backend.
+#   confluence — connector Confluence (`miodek confluence pull`). Klient zero-dep (urllib); tu trafiłby
+#                ewentualny cięższy konwerter formatu storage, gdyby był potrzebny.
 # „mbair-wiring" (quadlet/systemd/runbook obserwowalności) celowo zostaje poza dystrybucją.
 [project.optional-dependencies]
 exporter = []
 lt = []
+confluence = []
 
 [project.urls]
 Homepage = "https://github.com/researchanddeploy/sztuczny-miodek"

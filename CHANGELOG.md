@@ -5,6 +5,9 @@ wersjonowanie zgodne z [SemVer](https://semver.org/lang/pl/).
 
 ## [Nieopublikowane]
 
+### Dodane
+- Podkomenda `miodek confluence pull` — audyt prozy stron Confluence przez adapter (read-only). Connector na bibliotece standardowej, poświadczenia z env; adapter pomija makra `ac:`/`ri:` i kod jako wyspy nie-prozy.
+
 ## [1.1.0] - 2026-06-24
 
 ### Dodane

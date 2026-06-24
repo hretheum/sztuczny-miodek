@@ -465,15 +465,17 @@ class _ProseHTMLParser(_HTMLParser):
     Na znacznikach blokowych wstawia separator akapitu. Zawartość code/pre/script/style pomija.
     `source_map` to lista kotwic (offset_text, offset_source) wystarczająca do `to_source_offset`."""
 
-    def __init__(self):
+    def __init__(self, extra_skip_tags=frozenset()):
         super().__init__(convert_charrefs=True)
         self.parts: List[str] = []
         self.text_len = 0
         self.source_map: List[Tuple[int, int]] = []
         self._skip_depth = 0
+        # Znaczniki, których zawartość pomijamy (kod plus ewentualne wyspy formatu, np. makra Confluence).
+        self._skip_tags = _HTML_SKIP_CONTENT_TAGS | frozenset(extra_skip_tags)
 
     def handle_starttag(self, tag, attrs):
-        if tag in _HTML_SKIP_CONTENT_TAGS:
+        if tag in self._skip_tags:
             self._skip_depth += 1
         if tag in _HTML_BLOCK_TAGS and self.parts and not self.parts[-1].endswith("\n\n"):
             self.parts.append("\n\n")
@@ -483,7 +485,7 @@ class _ProseHTMLParser(_HTMLParser):
             self.text_len += 1
 
     def handle_endtag(self, tag):
-        if tag in _HTML_SKIP_CONTENT_TAGS and self._skip_depth > 0:
+        if tag in self._skip_tags and self._skip_depth > 0:
             self._skip_depth -= 1
         if tag in _HTML_BLOCK_TAGS and self.parts and not self.parts[-1].endswith("\n\n"):
             self.parts.append("\n\n")
@@ -523,6 +525,36 @@ class StructuralAdapter(InputAdapter):
 
     def normalize(self, raw: str) -> NormalizedDoc:
         parser = _ProseHTMLParser()
+        parser._raw = raw
+        parser.feed(raw)
+        parser.close()
+        text = "".join(parser.parts)
+        return NormalizedDoc(
+            text=text,
+            source=raw,
+            segments=split_paragraphs_faithful(text),
+            source_map=parser.source_map,
+        )
+
+
+# Makra i odwołania Confluence (storage format): wyspy nie-prozy. Ich zawartość pomijamy w audycie
+# (parametry makr, kod w plain-text-body, cele linków i osadzeń to nie tekst dla czytelnika).
+# MVP read-only: całe `ac:structured-macro` jest wyspą; wejście w rich-text-body paneli to przyszły krok.
+_CONFLUENCE_OPAQUE_TAGS = frozenset({
+    "ac:structured-macro", "ac:parameter", "ac:plain-text-body", "ac:rich-text-body",
+    "ac:link", "ac:link-body", "ac:plain-text-link-body", "ac:image", "ac:emoticon",
+    "ri:page", "ri:user", "ri:attachment", "ri:url", "ri:space", "ri:content-entity",
+})
+
+
+class ConfluenceStorageAdapter(StructuralAdapter):
+    """Adapter formatu storage Confluence (XHTML z makrami `ac:`/`ri:`). Rozszerza C4 o świadomość
+    makr: traktuje je jak wyspy nie-prozy (pomija zawartość), więc audyt widzi czystą prozę z
+    akapitów (`<p>`/`<li>`/`<h*>`/`<blockquote>`), a nie nazwy makr ani parametry. Tylko odczyt
+    (InputAdapter); zapis zwrotny do storage to osobny krok (wymaga kotwic per-encja)."""
+
+    def normalize(self, raw: str) -> NormalizedDoc:
+        parser = _ProseHTMLParser(extra_skip_tags=_CONFLUENCE_OPAQUE_TAGS)
         parser._raw = raw
         parser.feed(raw)
         parser.close()
