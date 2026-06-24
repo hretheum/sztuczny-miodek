@@ -1,3 +1,9 @@
+# Sekrety lokalne (tokeny PyPI / RunPod / OpenRouter itd.) — NIGDY nie commitować.
+# .env.example jest śledzony jako wzór; realny .env z wartościami zostaje lokalnie.
+.env
+.env.*
+!.env.example
+
 # Python
 __pycache__/
 *.pyc
