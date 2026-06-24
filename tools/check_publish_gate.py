@@ -40,6 +40,7 @@ _ENV["PYTHONPATH"] = _SRC + (os.pathsep + _ENV["PYTHONPATH"] if _ENV.get("PYTHON
 PUBLISH_GATE_CMD = [sys.executable, "-m", "miodek.publish_gate"]
 TESTS_DIR = os.path.join(REPO_ROOT, "tests")
 README = os.path.join(REPO_ROOT, "README.md")
+GATES_DOC = os.path.join(REPO_ROOT, "docs", "gates.md")
 
 BASELINE = os.path.join(TESTS_DIR, "baseline_pl_raport.md")   # twardy bloker → Stage 1 FAIL
 CONTROL = os.path.join(TESTS_DIR, "control_pl_clean.md")      # czysty, 0 trafień review → PASS
@@ -120,18 +121,19 @@ def main():
         import shutil
         shutil.rmtree(tmp, ignore_errors=True)
 
-    # (i) README ma sekcję F3 i nie mówi już „jeszcze nie ma" w wierszu F3.
-    if not os.path.isfile(README):
-        fails.append("(i) brak README.md.")
+    # (i) docs/gates.md ma sekcję bramki przed publikacją i nie mówi już „jeszcze nie ma".
+    #     Dokumentacja bramek mieszka w docs/gates.md (README jest wizytówką i tylko linkuje).
+    if not os.path.isfile(GATES_DOC):
+        fails.append("(i) brak docs/gates.md.")
     else:
-        with open(README, encoding="utf-8") as fh:
-            readme = fh.read()
-        if "Bramka przed publikacją" not in readme:
-            fails.append("(i) README nie zawiera sekcji 'Bramka przed publikacją'.")
-        if "publish_gate.py" not in readme:
-            fails.append("(i) README nie wspomina sterownika 'publish_gate.py'.")
-        if "jeszcze nie ma" in readme:
-            fails.append("(i) README wciąż mówi 'jeszcze nie ma' (wiersz F3 nieaktualny).")
+        with open(GATES_DOC, encoding="utf-8") as fh:
+            gates = fh.read()
+        if "Bramka przed publikacją" not in gates:
+            fails.append("(i) docs/gates.md nie zawiera sekcji 'Bramka przed publikacją'.")
+        if "publish_gate" not in gates:
+            fails.append("(i) docs/gates.md nie wspomina sterownika 'publish_gate'.")
+        if "jeszcze nie ma" in gates:
+            fails.append("(i) docs/gates.md wciąż mówi 'jeszcze nie ma' (wiersz nieaktualny).")
 
     if fails:
         for f in fails:
