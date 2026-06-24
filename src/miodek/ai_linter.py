@@ -22,7 +22,7 @@ import json
 import argparse
 import glob
 from dataclasses import dataclass
-from typing import Callable, List, Tuple
+from typing import Callable, Dict, List, Tuple
 
 # Importy wewnątrzpakietowe (KAN-227: pakiet miodek). Uruchamiane jako `python3 -m miodek.ai_linter`
 # lub przez entry point — nie jako luźny skrypt.
@@ -613,8 +613,64 @@ def format_manifest(all_hits: List[Hit], summaries: List[FileSummary]) -> str:
     return "\n".join(lines)
 
 
-def format_json(all_hits: List[Hit], summaries: List[FileSummary]) -> str:
-    """Formatuje wyjście JSON."""
+def compute_batch(all_hits: List[Hit], summaries: List[FileSummary]) -> dict:
+    """Agregat zbiorczy dla trybu batch (KAN-231) — czysta funkcja, bez wyjścia.
+
+    Daje obraz całości zamiast linii na plik, gdy lintuje się katalog albo duży wzorzec:
+    rozkład werdyktów, sumy, najbardziej problematyczne pliki (wg blokerów potem gęstości)
+    i najczęstsze reguły. Tę samą strukturę renderuje tekst (== BATCH ==) i JSON (klucz "batch").
+    """
+    verdicts: Dict[str, int] = {}
+    for s in summaries:
+        verdicts[s.verdict] = verdicts.get(s.verdict, 0) + 1
+    by_rule: Dict[str, int] = {}
+    for h in all_hits:
+        by_rule[h.mid] = by_rule.get(h.mid, 0) + 1
+    # problematyczne = blokery lub werdykt negatywny; sort malejąco po blokerach, potem gęstości
+    problem = sorted(
+        (s for s in summaries if s.blockers > 0 or s.verdict in ("FAIL", "FAIL-HARD")),
+        key=lambda s: (s.blockers, s.density),
+        reverse=True,
+    )
+    return {
+        "files": len(summaries),
+        "verdicts": verdicts,
+        "total_words": sum(s.words for s in summaries),
+        "total_hits": sum(s.hits for s in summaries),
+        "worst_files": [
+            {"file": s.file, "blockers": s.blockers, "density": s.density, "verdict": s.verdict}
+            for s in problem
+        ],
+        "top_rules": sorted(by_rule.items(), key=lambda kv: kv[1], reverse=True),
+    }
+
+
+def format_batch_report(agg: dict, top_n: int = 10) -> str:
+    """Renderuje agregat (compute_batch) jako blok tekstowy == BATCH ==."""
+    v = agg["verdicts"]
+    lines = ["", "== BATCH =="]
+    head = (f"plików: {agg['files']} | PASS: {v.get('PASS', 0)} | "
+            f"FAIL: {v.get('FAIL', 0)} | FAIL-HARD: {v.get('FAIL-HARD', 0)}")
+    if v.get("ERROR"):
+        head += f" | ERROR: {v['ERROR']}"
+    lines.append(head)
+    lines.append(f"słowa łącznie: {agg['total_words']} | trafienia łącznie: {agg['total_hits']}")
+    worst = agg["worst_files"]
+    if worst:
+        lines.append("")
+        lines.append(f"najbardziej problematyczne pliki (do {top_n} z {len(worst)}):")
+        for s in worst[:top_n]:
+            lines.append(f"  {s['file']} | blokery: {s['blockers']} | gęstość/500: {s['density']} | {s['verdict']}")
+    if agg["top_rules"]:
+        lines.append("")
+        lines.append(f"najczęstsze reguły (do {top_n}):")
+        for mid, cnt in agg["top_rules"][:top_n]:
+            lines.append(f"  {mid}: {cnt}")
+    return "\n".join(lines)
+
+
+def format_json(all_hits: List[Hit], summaries: List[FileSummary], report: bool = False) -> str:
+    """Formatuje wyjście JSON. Przy report=True dokłada klucz 'batch' (agregat zbiorczy)."""
     output = {
         "hits": [
             {"file": h.file, "line": h.line, "id": h.mid, "klasa": h.klasa, "match": h.match_fragment}
@@ -633,6 +689,8 @@ def format_json(all_hits: List[Hit], summaries: List[FileSummary]) -> str:
             for s in summaries
         ],
     }
+    if report:
+        output["batch"] = compute_batch(all_hits, summaries)
     return json.dumps(output, ensure_ascii=False, indent=2)
 
 
@@ -670,6 +728,13 @@ def main():
         metavar="ŚCIEŻKA",
         help="Słownik domenowy (JSON: allow/review/provenance) jako warstwa nadrzędna terminów (D2). "
              "Domyślnie brak słownika = obecne zachowanie.",
+    )
+    parser.add_argument(
+        "--report",
+        action="store_true",
+        help="Dołóż zbiorczy agregat batch (blok == BATCH == lub klucz 'batch' w JSON): rozkład "
+             "werdyktów, sumy, najbardziej problematyczne pliki, najczęstsze reguły. Opt-in; bez "
+             "tej flagi wyjście jest niezmienione.",
     )
     args = parser.parse_args()
 
@@ -713,9 +778,12 @@ def main():
         summaries.append(summary)
 
     if args.format == "json":
-        print(format_json(all_hits, summaries))
+        print(format_json(all_hits, summaries, report=args.report))
     else:
-        print(format_manifest(all_hits, summaries))
+        text = format_manifest(all_hits, summaries)
+        if args.report:
+            text += "\n" + format_batch_report(compute_batch(all_hits, summaries))
+        print(text)
 
     # Kod wyjścia: 1 jeśli którykolwiek plik = FAIL/FAIL-HARD
     if any(s.verdict in ("FAIL", "FAIL-HARD") for s in summaries):
