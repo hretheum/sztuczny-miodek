@@ -7,6 +7,7 @@ pakietu, zachowując jego kod wyjścia. Zastępuje prowizoryczny entry point z K
   correct  Stage 2: korektor (pętla audyt->poprawka->PASS; silnik z configu / --runpod). -> corrector._main
   gate     Bramka przed publikacją (Stage 1 zawsze, opcjonalnie Stage 2 --stage2).  -> publish_gate.main
   lt       Pełna korekta przez LanguageTool (na żądanie, wymaga endpointu).         -> languagetool_check.main
+  build-dict  Buduje szkic słownika domenowego z korpusu (D3).                      -> build_dict.main
 
 Delegacja: podkomendy mają własne parsery argparse — podmieniamy sys.argv tak, by widziały
 wyłącznie swoje argumenty. Kody wyjścia ujednolicamy (część modułów woła sys.exit, część zwraca
@@ -27,11 +28,13 @@ Komendy:
             (silnik z config.json; --runpod = efemeryczny Bielik na RunPodzie).
   gate      Bramka przed publikacją: Stage 1 zawsze, opcjonalnie Stage 2 (--stage2).
   lt        Pełna korekta przez LanguageTool (na żądanie; wymaga endpointu).
+  build-dict  Buduje szkic słownika domenowego z korpusu (częstość proponuje,
+            kanon wetuje, człowiek zatwierdza); szkic do --dict w `miodek lint`.
 
 Pomoc podkomendy:  miodek <komenda> --help
 """
 
-_COMMANDS = ("lint", "correct", "gate", "lt")
+_COMMANDS = ("lint", "correct", "gate", "lt", "build-dict")
 
 
 def _delegate(loader, rest):
@@ -86,6 +89,10 @@ def main(argv=None):
         def load():
             from miodek import languagetool_check
             return languagetool_check.main
+    elif cmd == "build-dict":
+        def load():
+            from miodek import build_dict
+            return build_dict.main
 
     return _delegate(load, rest)
 

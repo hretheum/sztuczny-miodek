@@ -506,16 +506,20 @@ Dopasowanie idzie po całym słowie, bez względu na wielkość liter. Wskazujes
 miodek lint --dict slownik.json --lang both ŚCIEŻKA_DO_PLIKU.md
 ```
 
-Bez słownika skill działa w trybie ogólnym: pełny audyt polszczyzny i manieryzmu AI. Słownik użytkownika jest zwykle zewnętrzny, dopasowany do jego dziedziny. Szkic można zbudować z własnego korpusu narzędziem `tools/build_dict.py` (świadomie poza paczką, dla dewelopera): częstość proponuje kandydatów, a człowiek decyduje, co trafi do `allow`.
+Bez słownika skill działa w trybie ogólnym: pełny audyt polszczyzny i manieryzmu AI. Słownik użytkownika jest zwykle zewnętrzny, dopasowany do jego dziedziny.
+
+Szkic słownika budujesz z własnego korpusu podkomendą `miodek build-dict`. Zasada: częstość proponuje kandydatów, kanon wetuje terminy będące manieryzmem, a człowiek zatwierdza (szkic ma `allow` puste, kandydaci lądują w `review` do przeniesienia):
+
+```bash
+miodek build-dict ./korpus --out szkic.json --projekt mój-projekt
+```
+
+Flagi: `--out` (plik wyjściowy, domyślnie stdout), `--min-count` i `--min-files` (progi częstości i rozrzutu), `--wordlist` (lista słów ogólnych do odsiania), `--projekt` (nazwa do provenance). Po przeglądzie przenosisz zaakceptowane terminy z `review` do `allow` i wskazujesz słownik flagą `--dict` w `miodek lint`.
 
 Repo zawiera własny słownik projektu `dictionary.project.json` (dogfooding). Oznacza terminy, które linter łapie jako manieryzm, choć w tej dokumentacji są poprawne, na przykład `robust` i `leverage` użyte jako przykłady terminów branżowych. Audyt z tym słownikiem wygasza te trafienia:
 
 ```bash
 miodek lint --dict dictionary.project.json --lang both README.md
-```
-
-```bash
-python3 tools/build_dict.py ./korpus --out slownik.json
 ```
 
 ## Atrybucja i licencja

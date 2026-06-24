@@ -18,7 +18,7 @@ import tempfile
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(REPO_ROOT, "src"))
-import build_dict   # noqa: E402
+from miodek import build_dict   # noqa: E402 — moduł w pakiecie (KAN-232)
 from miodek import dictionary   # noqa: E402
 
 

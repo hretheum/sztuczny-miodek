@@ -73,13 +73,23 @@ def main():
     if rc != 0:
         fails.append(f"lt --help: exit {rc}, oczekiwano 0 (zero sieci)")
 
+    rc, _ = run(["build-dict", "--help"])
+    if rc != 0:
+        fails.append(f"build-dict --help: exit {rc}, oczekiwano 0")
+    rc, out = run(["build-dict", CONTROL, "--min-count", "1", "--min-files", "1", "--projekt", "gate"])
+    if rc != 0:
+        fails.append(f"build-dict: exit {rc}, oczekiwano 0")
+    if '"review"' not in out or '"allow"' not in out:
+        fails.append("build-dict: wyjście nie jest szkicem słownika (brak kluczy allow/review)")
+
     if fails:
         print("FAIL check_cli:", file=sys.stderr)
         for f in fails:
             print("  -", f, file=sys.stderr)
         sys.exit(1)
-    print("OK   CLI miodek: dispatcher lint/correct/gate/lt deleguje i zachowuje kody wyjścia "
-          "(baseline FAIL, control PASS, gate, correct stub, usage/--help, nieznana=2, lt --help).")
+    print("OK   CLI miodek: dispatcher lint/correct/gate/lt/build-dict deleguje i zachowuje kody "
+          "wyjścia (baseline FAIL, control PASS, gate, correct stub, usage/--help, nieznana=2, "
+          "lt --help, build-dict szkic z allow/review).")
 
 
 if __name__ == "__main__":
