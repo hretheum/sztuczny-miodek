@@ -77,6 +77,10 @@ class NormalizedDoc:
     source: str
     segments: List[Segment] = field(default_factory=list)
     source_map: List[Tuple[int, int]] = field(default_factory=list)
+    # Węzły tekstowe prozy z DOKŁADNYM zakresem w źródle: (text_start, text_end, src_start, src_end).
+    # Używane przez OutputAdapter formatów strukturalnych do wiernego zapisu zwrotnego (podmiana
+    # całego węzła, bez rozjazdu offsetu na encjach). Puste => brak (adaptery tekstowe nie potrzebują).
+    text_leaves: List[Tuple[int, int, int, int]] = field(default_factory=list)
 
     def paragraphs(self) -> List[Segment]:
         return [s for s in self.segments if s.kind == "paragraph"]
@@ -473,8 +477,24 @@ class _ProseHTMLParser(_HTMLParser):
         self._skip_depth = 0
         # Znaczniki, których zawartość pomijamy (kod plus ewentualne wyspy formatu, np. makra Confluence).
         self._skip_tags = _HTML_SKIP_CONTENT_TAGS | frozenset(extra_skip_tags)
+        # Węzły tekstowe prozy z zakresem źródła (do wiernego zapisu zwrotnego). _leaf = pending
+        # [text_start, src_start]; zamykany na granicy tagu z text_end i src_end (pozycja „<").
+        self.leaves: List[Tuple[int, int, int, int]] = []
+        self._leaf = None
+        # Szkielet strukturalny (do weryfikacji wierności zapisu zwrotnego): log tagów z atrybutami
+        # oraz konkatenacja zawartości stref pomijanych (kod, makra). Proza (węzły tekstowe) NIE tu.
+        self.tag_log: List[tuple] = []
+        self.skip_text: List[str] = []
+
+    def _close_leaf(self):
+        if self._leaf is not None:
+            self.leaves.append((self._leaf[0], self.text_len, self._leaf[1],
+                                self._current_source_offset()))
+            self._leaf = None
 
     def handle_starttag(self, tag, attrs):
+        self._close_leaf()
+        self.tag_log.append((tag, tuple(sorted(attrs))))
         if tag in self._skip_tags:
             self._skip_depth += 1
         if tag in _HTML_BLOCK_TAGS and self.parts and not self.parts[-1].endswith("\n\n"):
@@ -485,6 +505,8 @@ class _ProseHTMLParser(_HTMLParser):
             self.text_len += 1
 
     def handle_endtag(self, tag):
+        self._close_leaf()
+        self.tag_log.append(("/" + tag,))
         if tag in self._skip_tags and self._skip_depth > 0:
             self._skip_depth -= 1
         if tag in _HTML_BLOCK_TAGS and self.parts and not self.parts[-1].endswith("\n\n"):
@@ -493,7 +515,10 @@ class _ProseHTMLParser(_HTMLParser):
 
     def handle_data(self, data):
         if self._skip_depth > 0:
+            self.skip_text.append(data)   # zawartość strefy pomijanej — do szkieletu, nie do prozy
             return
+        if self._leaf is None:
+            self._leaf = [self.text_len, self._current_source_offset()]
         # kotwica: bieżąca pozycja w prozie ↔ pozycja danych w źródle (getpos → wiersz/kol → offset).
         # ZNANE OGRANICZENIE (must-fix przed OutputAdapter): kotwica stawiana na POCZĄTKU bloku danych.
         # Gdy `data` zawiera zdekodowaną ENCJĘ (convert_charrefs scala „&amp;"→"&" w jeden blok),
@@ -528,12 +553,14 @@ class StructuralAdapter(InputAdapter):
         parser._raw = raw
         parser.feed(raw)
         parser.close()
+        parser._close_leaf()
         text = "".join(parser.parts)
         return NormalizedDoc(
             text=text,
             source=raw,
             segments=split_paragraphs_faithful(text),
             source_map=parser.source_map,
+            text_leaves=parser.leaves,
         )
 
 
@@ -558,13 +585,56 @@ class ConfluenceStorageAdapter(StructuralAdapter):
         parser._raw = raw
         parser.feed(raw)
         parser.close()
+        parser._close_leaf()
         text = "".join(parser.parts)
         return NormalizedDoc(
             text=text,
             source=raw,
             segments=split_paragraphs_faithful(text),
             source_map=parser.source_map,
+            text_leaves=parser.leaves,
         )
+
+    def write_back(self, doc: NormalizedDoc, edits: List[Edit]) -> str:
+        """Nanosi edycje prozy na storage XHTML, podmieniając CAŁE węzły tekstowe (bez rozjazdu
+        offsetu na encjach). Edycja akceptowana tylko, gdy jej zakres [start,end) pokrywa się
+        DOKŁADNIE z jednym węzłem tekstowym prozy (akapit = pojedynczy węzeł). Akapit z formatowaniem
+        inline (`<strong>`, `<ac:link>` w środku — wiele węzłów) jest POMIJANY (zostaje oryginał),
+        bo nie umiemy bezpiecznie złożyć go z powrotem. Nowa treść jest re-enkodowana (< > &),
+        więc nie wstrzyknie tagów. Strefy nie-prozy (makra, kod) pozostają nietknięte."""
+        by_range = {(s, e): (s0, s1) for (s, e, s0, s1) in doc.text_leaves}
+        src_edits = []
+        for ed in edits:
+            leaf = by_range.get((ed.start, ed.end))
+            if leaf is None:
+                continue  # nie pojedynczy węzeł prozy — pomijamy bezpiecznie
+            src_edits.append((leaf[0], leaf[1], _xml_escape_text(ed.replacement)))
+        out = doc.source
+        for s0, s1, repl in sorted(src_edits, key=lambda x: x[0], reverse=True):
+            out = out[:s0] + repl + out[s1:]
+        return out
+
+
+def _xml_escape_text(s: str) -> str:
+    """Escapuje tekst do wstawienia w element XHTML (storage): & < > (cudzysłowy w treści są OK)."""
+    return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def confluence_skeleton(storage: str):
+    """Szkielet strukturalny storage: (log tagów z atrybutami, zawartość stref pomijanych). Proza
+    (węzły tekstowe) NIE wchodzi. Dwa storage o równym szkielecie różnią się WYŁĄCZNIE prozą —
+    podstawa weryfikacji wierności zapisu zwrotnego (makra/kod/struktura nienaruszone)."""
+    parser = _ProseHTMLParser(extra_skip_tags=_CONFLUENCE_OPAQUE_TAGS)
+    parser._raw = storage
+    parser.feed(storage)
+    parser.close()
+    return tuple(parser.tag_log), "".join(parser.skip_text)
+
+
+def verify_prose_only_change(orig_storage: str, new_storage: str) -> bool:
+    """True, gdy new różni się od orig WYŁĄCZNIE prozą: identyczny szkielet (tagi, atrybuty,
+    zawartość makr/kodu). Twarda bramka przed zapisem do Confluence — chroni przed zjedzeniem makra."""
+    return confluence_skeleton(orig_storage) == confluence_skeleton(new_storage)
 
 
 def load(source: str, adapter: Optional[InputAdapter] = None) -> NormalizedDoc:

@@ -1,6 +1,6 @@
 # Audyt stron Confluence
 
-Miodek czyta strony Confluence przez adapter i audytuje czystą prozę, nie surowy storage. Connector pobiera stronę w formacie storage (XHTML), adapter wyłuskuje tekst z akapitów, a makra, kod i odwołania traktuje jak wyspy nie-prozy i pomija. To tryb tylko do odczytu; zapis zredagowanej wersji z powrotem do Confluence to osobny, kolejny krok.
+Miodek czyta strony Confluence przez adapter i audytuje czystą prozę, nie surowy storage. Connector pobiera stronę w formacie storage (XHTML), adapter wyłuskuje tekst z akapitów, a makra, kod i odwołania traktuje jak wyspy nie-prozy i pomija. Tryb `pull` audytuje (read-only), tryb `correct` poprawia prozę i zapisuje zredagowaną wersję z powrotem, z dry-run i jawnym potwierdzeniem.
 
 ## Konfiguracja
 
@@ -38,5 +38,27 @@ Storage Confluence to nie czysty HTML. Adapter traktuje jak wyspy nie-prozy i po
 - odwołania i linki (`ac:link`, `ri:page`, `ri:user`, `ri:attachment`, osadzone obrazy).
 
 Dzięki temu audyt widzi tekst dla czytelnika, a nie nazwy makr ani parametry. Proza z akapitów (`<p>`, `<li>`, `<h1>`-`<h6>`, `<blockquote>`) jest analizowana normalnie.
+
+## Correct: korekta prozy i zapis zwrotny
+
+Tryb `correct` poprawia prozę korektorem (Stage 2) i zapisuje zredagowaną wersję z powrotem do Confluence. Makra, kod i struktura zostają nietknięte, edytowane są wyłącznie akapity prozy.
+
+```bash
+miodek confluence correct --page 11763713 --engine ollama
+```
+
+Domyślnie to **dry-run**: narzędzie pokazuje diff proponowanej korekty prozy i nic nie zapisuje. Zapis wymaga jawnej flagi `--apply` oraz interaktywnego potwierdzenia per strona. Flaga `--yes` pomija potwierdzenie (dla CI, tylko w parze z `--apply`).
+
+Flagi:
+- `--page ID [ID ...]` — strony do poprawy.
+- `--engine stub|openai|ollama` — silnik korekty (nadpisuje `config.json`). Atrapa `stub` zwykle nic nie zmienia, realna korekta wymaga silnika `openai`/`ollama` z żywym endpointem.
+- `--apply` — zapisz zmiany. Bez tej flagi: dry-run.
+- `--yes` — pomiń potwierdzenie (CI).
+
+Bezpieczeństwo zapisu:
+- przed każdym zapisem twarda weryfikacja wierności: nowy storage może różnić się od oryginału wyłącznie prozą. Gdyby zmiana dotknęła makra albo struktury, narzędzie przerywa i nie zapisuje;
+- zapis tworzy nową wersję strony (numer o jeden wyższy), z komentarzem wersji, więc łatwo go cofnąć;
+- konflikt wersji (ktoś edytował stronę w międzyczasie) przerywa zapis, bez nadpisania cudzej zmiany;
+- ponowny przebieg bez zmian pomija zapis, więc nie pompuje numeru wersji.
 
 [← Powrót do README](../README.md)

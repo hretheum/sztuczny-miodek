@@ -164,7 +164,7 @@ def _para_offsets_for_segment(doc: adapter.NormalizedDoc, review_seg) -> Optiona
 
 
 def correct_document(text, *, file_path, engine, audit_fn=None, max_iter=DEFAULT_MAX_ITER,
-                     stage2_fn=None) -> CorrectionResult:
+                     stage2_fn=None, out_adapter=None) -> CorrectionResult:
     """Pętla korektora: audyt → poprawka → ponowny audyt, do PASS / braku postępu / limitu.
 
     Argumenty:
@@ -246,14 +246,15 @@ def correct_document(text, *, file_path, engine, audit_fn=None, max_iter=DEFAULT
             return CorrectionResult(text=current, iterations=i + 1, passed=False,
                                     reason="brak postępu", trace=trace)
 
-        out_adapter = ai_linter._select_adapter(file_path)
-        if not isinstance(out_adapter, adapter.OutputAdapter):
+        # Adapter zapisu zwrotnego: wstrzyknięty (np. ConfluenceStorageAdapter) albo wg rozszerzenia.
+        out_adapter_obj = out_adapter or ai_linter._select_adapter(file_path)
+        if not isinstance(out_adapter_obj, adapter.OutputAdapter):
             # Format strukturalny (HTML) nie ma zapisu zwrotnego (known limitation source_map).
             raise ValueError(
                 f"brak zapisu zwrotnego dla formatu strukturalnego ({file_path}); "
                 "korektor obsługuje .md i .txt"
             )
-        current = out_adapter.write_back(doc, edits)
+        current = out_adapter_obj.write_back(doc, edits)
 
     # Wyczerpany limit: sprawdź czy mimo to ostatni stan jest PASS.
     manifest, _doc = audit_fn(current, file_path)

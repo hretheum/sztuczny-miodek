@@ -7,6 +7,7 @@ wersjonowanie zgodne z [SemVer](https://semver.org/lang/pl/).
 
 ### Dodane
 - Podkomenda `miodek confluence pull` — audyt prozy stron Confluence przez adapter (read-only). Connector na bibliotece standardowej, poświadczenia z env; adapter pomija makra `ac:`/`ri:` i kod jako wyspy nie-prozy.
+- Podkomenda `miodek confluence correct` — korekta prozy i zapis zwrotny do Confluence. Dry-run domyślny, zapis tylko z `--apply` plus potwierdzeniem; twarda weryfikacja wierności przed zapisem (makra i struktura nietknięte), nowa wersja strony, przerwanie na konflikt wersji.
 
 ## [1.1.0] - 2026-06-24
 

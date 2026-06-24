@@ -72,14 +72,44 @@ def main():
         if forbidden in text:
             fails.append(f"adapter: nie pominął wyspy nie-prozy: {forbidden!r}")
 
+    # 4. write-back (KAN-234): podmiana akapitu prozy, makro nietknięte, re-encode encji
+    doc = adp.ConfluenceStorageAdapter().normalize(page.storage)
+    paras = doc.paragraphs()
+    ed = adp.Edit(paras[0].start, paras[0].end, "Nowy < akapit > & ok.")
+    new_storage = adp.ConfluenceStorageAdapter().write_back(doc, [ed])
+    if "Nowy &lt; akapit &gt; &amp; ok." not in new_storage:
+        fails.append("write_back: nowa proza nieobecna albo encje niezescapowane")
+    for keep in ("TYTUŁ-MAKRA", "kod = 1", "Inna"):
+        if keep not in new_storage:
+            fails.append(f"write_back: zniszczył wyspę nie-prozy: {keep!r}")
+    if not adp.verify_prose_only_change(page.storage, new_storage):
+        fails.append("verify: zmiana prozy uznana za naruszenie wierności (fałszywy alarm)")
+    if adp.verify_prose_only_change(page.storage, new_storage.replace("TYTUŁ-MAKRA", "ZEPSUTE")):
+        fails.append("verify: zepsucie makra NIE wykryte (luka bezpieczeństwa)")
+
+    # 5. update_page: skip bez zmian, 409 => ConfluenceConflict (atrapa transportu, zero sieci)
+    pg = confluence.ConfluencePage(id="9", title="T", storage=page.storage, version=3)
+    if confluence.update_page(pg, page.storage) is not pg:
+        fails.append("update_page: brak zmian powinien pominąć PUT (zwrócić tę samą stronę)")
+
+    def t409(url, *, method, headers, data, timeout):
+        return 409, "{}"
+    try:
+        confluence.update_page(pg, new_storage, base_url="https://x/wiki", email="e", token="k",
+                               transport=t409)
+        fails.append("update_page: 409 nie podniósł ConfluenceConflict")
+    except confluence.ConfluenceConflict:
+        pass
+
     if fails:
         print("check_confluence: ROZJAZD", file=sys.stderr)
         for f in fails:
             print(f"  - {f}", file=sys.stderr)
         sys.exit(1)
-    print("OK   Confluence (KAN-233): resolve_config bez ENV => błąd, fetch_page parsuje storage/wersję "
-          "przez atrapę transportu (zero sieci), ConfluenceStorageAdapter daje czystą prozę "
-          "(makra ac:/ri:, parametry i kod pominięte jako wyspy).")
+    print("OK   Confluence (KAN-233/234): resolve_config bez ENV => błąd, fetch_page parsuje storage "
+          "przez atrapę transportu (zero sieci), adapter daje czystą prozę (makra/kod jako wyspy); "
+          "write_back podmienia akapit (encje zescapowane, makra nietknięte), verify łapie zepsucie "
+          "makra, update_page pomija PUT bez zmian i podnosi konflikt na 409.")
     sys.exit(0)
 
 

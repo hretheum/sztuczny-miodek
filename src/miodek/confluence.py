@@ -98,6 +98,50 @@ def fetch_page(page_id: str, *, base_url: Optional[str] = None, email: Optional[
     return parse_page(raw)
 
 
+class ConfluenceConflict(RuntimeError):
+    """Konflikt wersji przy zapisie (ktoś edytował stronę w międzyczasie). Nie nadpisujemy."""
+
+
+def _default_write_transport(url: str, *, method: str, headers: dict, data: bytes, timeout: float):
+    """Domyślny transport zapisu (PUT). Zwraca (status, treść). Nie rzuca na 4xx (zwraca kod)."""
+    import urllib.error
+    req = urllib.request.Request(url, data=data, headers=headers, method=method)
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return resp.status, resp.read().decode("utf-8")
+    except urllib.error.HTTPError as e:
+        return e.code, e.read().decode("utf-8", errors="replace")
+
+
+def update_page(page: ConfluencePage, new_storage: str, *, base_url=None, email=None, token=None,
+                transport=None, timeout: float = 30.0, comment: str = "miodek: korekta prozy") -> ConfluencePage:
+    """Zapisuje zredagowany storage jako NOWĄ wersję (numer N+1). Bezpieczne do wielokrotnego
+    uruchomienia: gdy storage bez zmian, pomija PUT (nie pompuje wersji). Konflikt wersji (409)
+    przerywa bez nadpisania cudzej zmiany."""
+    if new_storage == page.storage:
+        return page  # brak zmian — nie tworzymy nowej wersji
+    base, email, token = resolve_config(base_url, email, token)
+    auth = base64.b64encode(f"{email}:{token}".encode()).decode()
+    headers = {"Authorization": f"Basic {auth}", "Content-Type": "application/json",
+               "Accept": "application/json", "User-Agent": USER_AGENT}
+    body = json.dumps({
+        "id": page.id, "type": "page", "title": page.title,
+        "version": {"number": page.version + 1, "message": comment},
+        "body": {"storage": {"value": new_storage, "representation": "storage"}},
+    }).encode("utf-8")
+    url = f"{base}/rest/api/content/{page.id}"
+    transport = transport or _default_write_transport
+    status, resp = transport(url, method="PUT", headers=headers, data=body, timeout=timeout)
+    if status == 409:
+        raise ConfluenceConflict(
+            f"konflikt wersji strony {page.id} (oczekiwano {page.version}+1). Ktoś edytował stronę. "
+            "Odśwież (ponowny pull) i spróbuj jeszcze raz."
+        )
+    if status >= 400:
+        raise RuntimeError(f"zapis strony {page.id} nie powiódł się (HTTP {status})")
+    return parse_page(resp)
+
+
 def _slug(title: str, fallback: str) -> str:
     """Bezpieczna nazwa pliku z tytułu strony."""
     import re
@@ -152,15 +196,113 @@ def _pull(args) -> int:
     return 1 if (fetch_errors or verdict_fail) else 0
 
 
+def _correct(args) -> int:
+    """Tryb correct (KAN-234): pobierz stronę, popraw prozę korektorem (Stage 2), zapisz zredagowaną
+    wersję z powrotem. DRY-RUN DOMYŚLNY (pokazuje diff, nie zapisuje); zapis tylko z --apply plus
+    potwierdzeniem. Makra, kod i struktura nietknięte; twarda weryfikacja wierności przed PUT."""
+    import sys
+    import difflib
+    from miodek import corrector
+    from miodek import adapter as adp
+
+    try:
+        engine = corrector.build_corrector_engine(name=args.engine, config_path=args.config)
+    except Exception as e:  # noqa: BLE001
+        print(f"[ERROR] nie zbudowano silnika korektora: {e}", file=sys.stderr)
+        return 2
+
+    conf_adapter = adp.ConfluenceStorageAdapter()
+
+    changed_any = False
+    errors = 0
+    for pid in args.page:
+        try:
+            page = fetch_page(pid)
+        except ConfluenceNotConfigured as e:
+            print(f"[ERROR] {e}", file=sys.stderr)
+            return 2
+        except Exception as e:  # noqa: BLE001
+            print(f"[ERROR] nie pobrano strony {pid}: {e}", file=sys.stderr)
+            errors += 1
+            continue
+
+        # Korekta prowadzona na PROZIE (sprawdzony korektor na .txt). Poprawki wracają na storage
+        # przez alignment akapitów (korektor zachowuje liczbę akapitów) + write_back adaptera.
+        doc = conf_adapter.normalize(page.storage)
+        result = corrector.correct_document(
+            doc.text, file_path="_confluence_audit.txt", engine=engine,
+            stage2_fn=corrector._make_managed_stage2(args.config),  # auto-offload poda RunPod po użyciu
+        )
+        new_storage = page.storage
+        if result.text != doc.text:
+            orig_paras = doc.paragraphs()
+            new_paras = adp.split_paragraphs_faithful(result.text)
+            if len(orig_paras) != len(new_paras):
+                print(f"[ABORT] „{page.title}” (id {pid}): korekta zmieniła liczbę akapitów "
+                      "(nieoczekiwane); nie składam z powrotem.", file=sys.stderr)
+                errors += 1
+                continue
+            edits = [adp.Edit(o.start, o.end, n.text)
+                     for o, n in zip(orig_paras, new_paras) if o.text != n.text]
+            new_storage = conf_adapter.write_back(doc, edits)
+        if new_storage == page.storage:
+            print(f"[confluence] „{page.title}” (id {pid}): brak zmian "
+                  f"(werdykt korektora: {result.reason}).", file=sys.stderr)
+            continue
+
+        # TWARDA BRAMKA: nowy storage może różnić się od oryginału WYŁĄCZNIE prozą.
+        if not adp.verify_prose_only_change(page.storage, new_storage):
+            print(f"[ABORT] „{page.title}” (id {pid}): weryfikacja wierności nie przeszła "
+                  "(zmiana dotknęłaby makr/struktury). NIE zapisuję.", file=sys.stderr)
+            errors += 1
+            continue
+
+        # Diff prozy (czytelny dla człowieka) — przed/po na wyłuskanym tekście.
+        old_prose = conf_adapter.normalize(page.storage).text.splitlines()
+        new_prose = conf_adapter.normalize(new_storage).text.splitlines()
+        diff = list(difflib.unified_diff(old_prose, new_prose,
+                                         fromfile=f"{pid} (przed)", tofile=f"{pid} (po)", lineterm=""))
+        print(f"\n=== „{page.title}” (id {pid}, wersja {page.version}) — proponowana korekta prozy ===")
+        print("\n".join(diff) if diff else "(zmiana tylko w obrębie linii)")
+        changed_any = True
+
+        if not args.apply:
+            print(f"[dry-run] NIE zapisano. Dodaj --apply, aby zapisać jako wersję {page.version + 1}.",
+                  file=sys.stderr)
+            continue
+
+        if not args.yes:
+            try:
+                ans = input(f"Zapisać stronę {pid} „{page.title}” jako wersję {page.version + 1}? [t/N] ")
+            except EOFError:
+                ans = ""
+            if ans.strip().lower() not in ("t", "tak", "y", "yes"):
+                print(f"[pominięto] {pid}: bez zapisu (brak potwierdzenia).", file=sys.stderr)
+                continue
+        try:
+            updated = update_page(page, new_storage)
+            print(f"[zapisano] {pid}: wersja {updated.version}.", file=sys.stderr)
+        except ConfluenceConflict as e:
+            print(f"[ABORT] {e}", file=sys.stderr)
+            errors += 1
+        except Exception as e:  # noqa: BLE001
+            print(f"[ERROR] zapis {pid} nie powiódł się: {e}", file=sys.stderr)
+            errors += 1
+
+    return 1 if errors else 0
+
+
 def main(argv=None) -> int:
-    """Podkomenda `miodek confluence` (KAN-233, Krok 1). Tryb: pull (read-only audyt prozy)."""
+    """Podkomenda `miodek confluence` (KAN-233/234). Tryby: pull (read-only audyt), correct (write-back)."""
     import argparse
+    from miodek import config as _config
     ap = argparse.ArgumentParser(
         prog="miodek confluence",
-        description="Audyt prozy stron Confluence przez adapter (read-only; bez zapisu zwrotnego).",
+        description="Audyt i korekta prozy stron Confluence przez adapter.",
     )
     sub = ap.add_subparsers(dest="cmd", required=True)
-    pull = sub.add_parser("pull", help="Pobierz i zaudytuj prozę strony/stron (bez zapisu).")
+
+    pull = sub.add_parser("pull", help="Pobierz i zaudytuj prozę strony/stron (read-only).")
     pull.add_argument("--page", nargs="+", required=True, metavar="ID",
                       help="ID strony Confluence (można podać wiele).")
     pull.add_argument("--out", default="conflu",
@@ -168,9 +310,25 @@ def main(argv=None) -> int:
     pull.add_argument("--lang", choices=["pl", "en", "both"], default="both")
     pull.add_argument("--report", action="store_true",
                       help="Dołóż zbiorczy agregat batch (== BATCH ==).")
+
+    corr = sub.add_parser("correct",
+                          help="Popraw prozę korektorem i zapisz z powrotem (dry-run domyślny).")
+    corr.add_argument("--page", nargs="+", required=True, metavar="ID",
+                      help="ID strony Confluence (można podać wiele).")
+    corr.add_argument("--engine", default=None, choices=("stub", "openai", "ollama"),
+                      help="Silnik korekty (nadpisuje config). Domyślnie z config.json.")
+    corr.add_argument("--config", default=_config.CONFIG_PATH, help="Ścieżka config.json.")
+    corr.add_argument("--lang", choices=["pl", "en", "both"], default="both")
+    corr.add_argument("--apply", action="store_true",
+                      help="Zapisz zmiany do Confluence. Bez tej flagi: dry-run (tylko diff).")
+    corr.add_argument("--yes", action="store_true",
+                      help="Pomiń interaktywne potwierdzenie (tylko w parze z --apply, np. CI).")
+
     args = ap.parse_args(argv)
     if args.cmd == "pull":
         return _pull(args)
+    if args.cmd == "correct":
+        return _correct(args)
     return 2
 
 
