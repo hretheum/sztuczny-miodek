@@ -13,6 +13,8 @@ Fork rozwija narzędzie o kolejne warstwy:
 - ekonomię i obserwowalność: metryki z manifestu oraz eksporter Prometheus,
 - integrację LanguageTool na żądanie.
 
+Czysty skill (tryby A i B) żyje w Claude Code: wywołujesz go w rozmowie, a model prowadzi audyt i korektę. CLI przez `uvx` (tryb C) wynosi te same reguły poza Claude Code, do terminala i do potoku CI, jako samodzielne polecenie `miodek` działające bez asystenta.
+
 ## Spis treści
 
 - [Co robi](#co-robi)
@@ -46,9 +48,9 @@ Fork rozwija narzędzie o kolejne warstwy:
 Skill realizuje dwie misje:
 
 1. **Wzorcowa polszczyzna (PL)** — pełny audyt tekstu polskiego wg dziesięciu priorytetów: cyrylica, kalki angielskie, fałszywi przyjaciele, anglicyzmy, sztuczne kolokacje, interpunkcja, styl i gramatyka, ortografia terminów łacińskich/greckich, manieryzm AI, typografia.
-2. **Usuwanie AI-tellów (PL + EN)** — wykrywa i usuwa manieryzmy generatywne: puste signposty, triady (rule-of-three), antytezę „nie X — to Y", paralelizm, nadużycie myślnika, puste superlatywy, klisze redefinicyjne, emoji w nagłówkach. Dla raportów, syntez, listów motywacyjnych, CV i dokumentacji.
+2. **Usuwanie AI-tellów (PL + EN)** — wykrywa i usuwa manieryzmy generatywne: puste signposty, triady (rule-of-three), antytezę „nie X — to Y”, paralelizm, nadużycie myślnika, puste superlatywy, klisze redefinicyjne, emoji w nagłówkach. Dla raportów, syntez, listów motywacyjnych, CV i dokumentacji.
 
-Skill działa jako **twarda bramka jakości** przed deklaracją „done". Obowiązuje semantyka **„PASS z uwagami = NIE PASS"**: każdy nierozwiązany flag blokuje werdykt PASS. Werdykt FAIL zapada przy cyrylicy w tekście PL (FAIL-HARD), markerze klasy `block` po przekroczeniu progu albo gęstości ważonej trafień powyżej 8 na 500 słów.
+Skill działa jako **twarda bramka jakości** przed deklaracją „done”. Obowiązuje semantyka **„PASS z uwagami = NIE PASS”**: każdy nierozwiązany flag blokuje werdykt PASS. Werdykt FAIL zapada przy cyrylicy w tekście PL (FAIL-HARD), markerze klasy `block` po przekroczeniu progu albo gęstości ważonej trafień powyżej 8 na 500 słów.
 
 Zasada Miodka: poprawiaj to, co ma polski odpowiednik; zachowuj to, co przyjęło się w danej dziedzinie. Dla manieryzmu AI: zmieniaj teksturę prozy, zachowuj fakty i metryki.
 
@@ -60,7 +62,7 @@ Zasada Miodka: poprawiaj to, co ma polski odpowiednik; zachowuj to, co przyjęł
 
 **Kanon 14 kategorii manieryzmu (`manieryzm-ai.md`).** Źródło prawdy taksonomii. Każde ID kategorii ma odpowiednik w linterze. Kategorie PL: PL-SIGN, PL-CLICHE, PL-RHET, PL-RHYTHM, PL-HEDGE, PL-TYPO. Kategorie EN: EN-DASH, EN-ANTI, EN-TRIAD, EN-PARA, EN-CLICHE, EN-HEDGE, EN-SUPER, EN-CONCL.
 
-**Priorytety 1–10 (`SKILL.md`).** Ranking wykrywania błędów polszczyzny, od cyrylicy (Priorytet 1) przez sztuczne kolokacje (Priorytet 5, „najczęściej przeoczana kategoria") i interpunkcję (Priorytet 6) po typografię (Priorytet 10). Każdy priorytet ma tabelę wzorców z poprawkami i regexami skanowania.
+**Priorytety 1–10 (`SKILL.md`).** Ranking wykrywania błędów polszczyzny, od cyrylicy (Priorytet 1) przez sztuczne kolokacje (Priorytet 5, „najczęściej przeoczana kategoria”) i interpunkcję (Priorytet 6) po typografię (Priorytet 10). Każdy priorytet ma tabelę wzorców z poprawkami i regexami skanowania.
 
 ## Instalacja
 
@@ -110,6 +112,16 @@ Alternatywnie, wprost ze źródła git (np. dla gałęzi roboczej przed wydaniem
 uvx --from git+https://github.com/hretheum/sztuczny-miodek@epic-a-reguly-jako-dane \
   miodek lint --lang both ŚCIEŻKA_DO_PLIKU.md
 ```
+
+Co daje tryb C, czego nie ma czysty skill z trybów A i B:
+
+- działa poza Claude Code, w dowolnym terminalu i w potoku CI, bez asystenta;
+- batch na całych katalogach i wzorcach glob z jednym zbiorczym kodem wyjścia (audyt dużych wolumenów);
+- trzy bramki jakości jako kroki automatyzacji: przy zapisie, na merge request, przed publikacją;
+- osąd modelu Stage 2 z routingiem silników oraz korektor doprowadzający tekst do werdyktu PASS;
+- eksporter metryk Prometheus jako osobne polecenie `miodek-exporter`.
+
+Tryby A i B zostają najlepsze do pracy w rozmowie z Claude Code; tryb C jest do skryptów, CI i hooków gita.
 
 Rdzeń nie ma żadnych zależności (sama biblioteka standardowa). Warstwy opcjonalne wydzielają extras `[exporter]` i `[lt]`. Są one dziś puste, bo wszystkie komponenty działają na bibliotece standardowej, więc instalacja z extra (`uv tool install "miodek[exporter]"`) daje na razie ten sam wynik co bez niego. Powiązanie z homelabem (quadlet, systemd) zostaje poza paczką, deklaratywnie w repozytorium infrastruktury.
 
@@ -214,7 +226,7 @@ W roli `pre-commit` zatrzyma commit, gdy któryś plik prozy ma twardy bloker. B
 
 Druga bramka działa na pull requeście, nie przy zapisie. Workflow `.github/workflows/miodek-gate.yml` (GitHub Actions, trigger `pull_request`) liczy pliki prozy (`.md`/`.txt`) ZMIENIONE w PR względem bazy, woła na nich linter i FAIL-uje check przy PEŁNYM werdykcie. Sterownik to moduł `miodek.ci_gate`, wołany `python3 -m miodek.ci_gate` (zero zależności, czysta biblioteka standardowa plus git). To sterownik CI, więc świadomie nie ma go w dispatcherze `miodek`.
 
-Kluczowa różnica wobec write-time. Bramka CI zatrzymuje cały pełny werdykt, czyli `FAIL` oraz `FAIL-HARD`, a więc także samą gęstość ponad próg, nie tylko twarde blokery. To odwrotna polityka niż write-time, która gęstość przepuszcza. Z tabeli trzech bramek (sekcja wyżej) bierze wiersz „CI": pełny werdykt, łapie też samą gęstość. Trzecią bramkę, przed publikacją (z opcjonalnym osądem modelu Stage 2), opisuje sekcja „Bramka przed publikacją" niżej.
+Kluczowa różnica wobec write-time. Bramka CI zatrzymuje cały pełny werdykt, czyli `FAIL` oraz `FAIL-HARD`, a więc także samą gęstość ponad próg, nie tylko twarde blokery. To odwrotna polityka niż write-time, która gęstość przepuszcza. Z tabeli trzech bramek (sekcja wyżej) bierze wiersz „CI”: pełny werdykt, łapie też samą gęstość. Trzecią bramkę, przed publikacją (z opcjonalnym osądem modelu Stage 2), opisuje sekcja „Bramka przed publikacją” niżej.
 
 | Bramka | Polityka | Zakres |
 |---|---|---|
@@ -243,11 +255,11 @@ W przeciwieństwie do write-time bramka CI nie jest fail-open: błąd reguł lub
 
 ## Bramka przed publikacją
 
-Trzecia i najsurowsza bramka to wymienny krok wołany PRZED publikacją prozy (wysyłka na Confluence, Notion lub stronę). Inny przepływ publikacji woła ją na jawnie wskazanych plikach „do publikacji", żeby zatrzymać tekst nieprzechodzący jakości. Sterownik to podkomenda `miodek gate` (moduł `miodek.publish_gate`, zero zależności, czysta biblioteka standardowa). Bramka ma dwa poziomy.
+Trzecia i najsurowsza bramka to wymienny krok wołany PRZED publikacją prozy (wysyłka na Confluence, Notion lub stronę). Inny przepływ publikacji woła ją na jawnie wskazanych plikach „do publikacji”, żeby zatrzymać tekst nieprzechodzący jakości. Sterownik to podkomenda `miodek gate` (moduł `miodek.publish_gate`, zero zależności, czysta biblioteka standardowa). Bramka ma dwa poziomy.
 
 Stage 1 działa zawsze. To pełny werdykt lintera na podanych plikach, ta sama polityka co bramka CI, tylko na jawnych plikach zamiast na diffie. Werdykt `FAIL` albo `FAIL-HARD` (blokery lub gęstość ponad próg) zamyka publikację. Stage 1 reużywa `ci_gate.filter_prose` i `ci_gate.run_linter`, więc polityka pełnego werdyktu jest jednym kodem dla bramki CI i bramki przed publikacją.
 
-Stage 2 jest opcjonalny i włącza się flagą `--stage2`. Buduje manifest (`ai_linter.py --format json`), wybiera silnik osądu z `config.json` (sekcja `stage2`) przez `runner.build_engine_from_config` i woła `runner.run_stage2_managed` (osąd plus auto-offload poda RunPod dla silników zdalnych). Bramka jest surowa: jakikolwiek werdykt `rewrite` zamyka publikację. To realizuje zasadę „PASS z uwagami to NIE PASS", więc bramka przed publikacją jako jedyna może dołożyć osąd modelu i jest tym surowsza niż bramka CI.
+Stage 2 jest opcjonalny i włącza się flagą `--stage2`. Buduje manifest (`ai_linter.py --format json`), wybiera silnik osądu z `config.json` (sekcja `stage2`) przez `runner.build_engine_from_config` i woła `runner.run_stage2_managed` (osąd plus auto-offload poda RunPod dla silników zdalnych). Bramka jest surowa: jakikolwiek werdykt `rewrite` zamyka publikację. To realizuje zasadę „PASS z uwagami to NIE PASS”, więc bramka przed publikacją jako jedyna może dołożyć osąd modelu i jest tym surowsza niż bramka CI.
 
 Czym bramka przed publikacją różni się od dwóch pozostałych bramek:
 
@@ -336,7 +348,7 @@ Uczciwość danych: współczynnik redukcji, atrybucja per reguła i wskaźnik z
 
 Artefakty wdrożeniowe (jednostka systemd eksportera, fragment scrape do `prometheus.yml`, provider provisioningu i dashboard Grafany) leżą w `deploy/`. Runbook wdrożenia i pełen schemat metryk: `deploy/README.md` oraz `metrics-exporter.schema.md`.
 
-**Runner Stage 2 (moduł `miodek.runner`, wołany `python3 -m miodek.runner`).** Spina linter z osądem modelu. Czyta manifest, wybiera segmenty `review` (tą samą funkcją co współczynnik redukcji), woła wymienialny silnik osądu i stosuje bramkę „PASS z uwagami to NIE PASS". Domyślny silnik to deterministyczna atrapa (bez sieci); realny silnik wpina się przez `engines.JudgeEngine` bez zmian w runnerze.
+**Runner Stage 2 (moduł `miodek.runner`, wołany `python3 -m miodek.runner`).** Spina linter z osądem modelu. Czyta manifest, wybiera segmenty `review` (tą samą funkcją co współczynnik redukcji), woła wymienialny silnik osądu i stosuje bramkę „PASS z uwagami to NIE PASS”. Domyślny silnik to deterministyczna atrapa (bez sieci); realny silnik wpina się przez `engines.JudgeEngine` bez zmian w runnerze.
 
 ```bash
 python3 -m miodek.runner --manifest manifest.json        # exit 1 gdy bramka FAIL
@@ -408,7 +420,7 @@ miodek correct --file artykul.md --runpod                # korekta realnym Bieli
 miodek gate --runpod artykul.md              # --runpod sam włącza Stage 2 na podzie
 ```
 
-Flaga nadpisuje `--engine` i sekcję `lifecycle` (efemeryczny pod sam jest owijaczem przebiegu). Bez `--runpod` zachowanie jest bez zmian: domyślnie stub, zero sieci, zero kosztu. Szczegóły cyklu i testu offline: `runpod-lifecycle.schema.md` (sekcja „Tryb EFEMERYCZNY"); parametry poda: `config.schema.md` (podsekcja `stage2.runpod`).
+Flaga nadpisuje `--engine` i sekcję `lifecycle` (efemeryczny pod sam jest owijaczem przebiegu). Bez `--runpod` zachowanie jest bez zmian: domyślnie stub, zero sieci, zero kosztu. Szczegóły cyklu i testu offline: `runpod-lifecycle.schema.md` (sekcja „Tryb EFEMERYCZNY”); parametry poda: `config.schema.md` (podsekcja `stage2.runpod`).
 
 ### Routing silnika: lejek kosztowy
 
@@ -426,7 +438,7 @@ Stage 2 da się prowadzić dwoma silnikami naraz, żeby mocny model dotykał tyl
 }
 ```
 
-`primary` i `appellate` to pod-konfiguracje o tym samym kształcie co sekcja `stage2`, budowane rekurencyjnie. Routing jest jednopoziomowy: nie wolno zagnieżdżać `engine: "routing"` w primary ani appellate. Kontrakt, polityka i ograniczenie wobec auto-offloadu poda są w `engines.schema.md` (sekcja „Routing silnika"). Self-test offline na atrapach: `tools/check_routing.py`.
+`primary` i `appellate` to pod-konfiguracje o tym samym kształcie co sekcja `stage2`, budowane rekurencyjnie. Routing jest jednopoziomowy: nie wolno zagnieżdżać `engine: "routing"` w primary ani appellate. Kontrakt routingu wobec auto-offloadu poda opisuje `engines.schema.md` (sekcja „Routing silnika”). Self-test offline na atrapach: `tools/check_routing.py`.
 
 Schematy: `metrics.schema.md` (redukcja, atrybucja, zdrowie), `runner.schema.md` (kontrakt orkiestracji), `engines.schema.md` (kontrakt realnych adapterów silnika), `runpod-lifecycle.schema.md` (auto-offload poda RunPod), `decision-log.schema.md` (wspólny strumień zdarzeń runnera i logu decyzji).
 
@@ -436,7 +448,7 @@ Korektor (podkomenda `miodek correct`, moduł `miodek.corrector`) zamyka pętlę
 
 Pętla zatrzymuje się w jednym z trzech przypadków. Pierwszy to PASS, czyli bramka Stage 2 nie zwraca już segmentów do przepisania. Drugi to brak postępu, gdy żadne przepisanie nie zmieniło tekstu w danej iteracji (ochrona przed pętlą bez końca). Trzeci to wyczerpanie limitu iteracji (domyślnie 4, konfigurowalne). Zwracany jest finalny tekst plus raport: liczba iteracji, czy osiągnięto PASS, powód zatrzymania, ślad ile segmentów poprawiono w każdej iteracji.
 
-Silnik jest wymienny przez ten sam interfejs co osąd Stage 2. Korektor woła go wyłącznie przez `judge` i `rewrite`. Domyślny silnik z configu (`stub`) daje deterministyczną atrapę offline (`StubRewriteEngine`), która neutralizuje wykryty wzorzec tak, by ponowny audyt go nie łapał, więc pętla zbiega bez sieci. Realny model (`openai`/`ollama`) wpina się bez zmiany pętli: dostaje osobny prompt po polsku „przepisz akapit usuwając manieryzm, zachowaj sens i rejestr".
+Silnik jest wymienny przez ten sam interfejs co osąd Stage 2. Korektor woła go wyłącznie przez `judge` i `rewrite`. Domyślny silnik z configu (`stub`) daje deterministyczną atrapę offline (`StubRewriteEngine`), która neutralizuje wykryty wzorzec tak, by ponowny audyt go nie łapał, więc pętla zbiega bez sieci. Realny model (`openai`/`ollama`) wpina się bez zmiany pętli: dostaje osobny prompt po polsku „przepisz akapit usuwając manieryzm, zachowaj sens i rejestr”.
 
 ```bash
 miodek correct --file artykul.md --engine ollama  # korekta realnym modelem (sieć)
@@ -472,7 +484,7 @@ Klient jest zero-dep (biblioteka standardowa, `urllib`) i odpytuje serwer Langua
 
 ## Opcjonalna warstwa terminologii domenowej
 
-Niektóre terminy branżowe wyglądają jak manieryzm AI, choć w danej dziedzinie są poprawne (na przykład „robust" jako nazwa produktu albo „leverage" w finansach). Słownik domenowy pozwala je oznaczyć, żeby linter ich nie flagował. To warstwa nadrzędna nad regułami: gdy słownik mówi `allow`, trafienie markera na ten termin jest pomijane.
+Niektóre terminy branżowe wyglądają jak manieryzm AI, choć w danej dziedzinie są poprawne (na przykład „robust” jako nazwa produktu albo „leverage” w finansach). Słownik domenowy pozwala je oznaczyć, żeby linter ich nie flagował. To warstwa nadrzędna nad regułami: gdy słownik mówi `allow`, trafienie markera na ten termin jest pomijane.
 
 Format to JSON (biblioteka standardowa, zero zależności, spójnie z `rules.json` i `config.json`):
 
@@ -494,7 +506,13 @@ Dopasowanie idzie po całym słowie, bez względu na wielkość liter. Wskazujes
 miodek lint --dict slownik.json --lang both ŚCIEŻKA_DO_PLIKU.md
 ```
 
-Bez słownika skill działa w trybie ogólnym: pełny audyt polszczyzny i manieryzmu AI. Słownik jest zewnętrzny i nie wchodzi w skład repozytorium. Szkic słownika można zbudować z własnego korpusu narzędziem `tools/build_dict.py` (świadomie poza paczką, dla dewelopera): częstość proponuje kandydatów, a człowiek decyduje, co trafi do `allow`.
+Bez słownika skill działa w trybie ogólnym: pełny audyt polszczyzny i manieryzmu AI. Słownik użytkownika jest zwykle zewnętrzny, dopasowany do jego dziedziny. Szkic można zbudować z własnego korpusu narzędziem `tools/build_dict.py` (świadomie poza paczką, dla dewelopera): częstość proponuje kandydatów, a człowiek decyduje, co trafi do `allow`.
+
+Repo zawiera własny słownik projektu `dictionary.project.json` (dogfooding). Oznacza terminy, które linter łapie jako manieryzm, choć w tej dokumentacji są poprawne, na przykład `robust` i `leverage` użyte jako przykłady terminów branżowych. Audyt z tym słownikiem wygasza te trafienia:
+
+```bash
+miodek lint --dict dictionary.project.json --lang both README.md
+```
 
 ```bash
 python3 tools/build_dict.py ./korpus --out slownik.json
@@ -506,4 +524,4 @@ Autor oryginalnego skilla: **Tomasz Jakubowski** (upstream: [github.com/research
 
 Kod, taksonomia AI-tellów, reguły polszczyzny i układ skilla: licencja **MIT** (zob. plik `LICENSE`).
 
-Metodologia opiera się na pracy **Jana Miodka** (pragmatyczny puryzm, „Ojczyzna polszczyzna"). To referencja i atrybucja, nie redystrybucja chronionej treści. Licencja MIT obejmuje wyłącznie materiały tego repozytorium; nie rozciąga się na cudzą własność intelektualną, do której repo się odwołuje.
+Metodologia opiera się na pracy **Jana Miodka** (pragmatyczny puryzm, „Ojczyzna polszczyzna”). To referencja i atrybucja, nie redystrybucja chronionej treści. Licencja MIT obejmuje wyłącznie materiały tego repozytorium; nie rozciąga się na cudzą własność intelektualną, do której repo się odwołuje.

@@ -126,8 +126,8 @@ def main():
     else:
         with open(README, encoding="utf-8") as fh:
             readme = fh.read()
-        if "Bramka przed publikacją (F3)" not in readme:
-            fails.append("(i) README nie zawiera sekcji 'Bramka przed publikacją (F3)'.")
+        if "Bramka przed publikacją" not in readme:
+            fails.append("(i) README nie zawiera sekcji 'Bramka przed publikacją'.")
         if "publish_gate.py" not in readme:
             fails.append("(i) README nie wspomina sterownika 'publish_gate.py'.")
         if "jeszcze nie ma" in readme:

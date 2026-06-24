@@ -1,0 +1,14 @@
+{
+  "provenance": {
+    "projekt": "sztuczny-miodek",
+    "wersja": "1.0",
+    "data": "2026-06-24",
+    "autor": "zespół forka",
+    "zrodlo": "Terminologia własnej dokumentacji projektu. Słownik domenowy dla samego repozytorium: terminy branżowe, które linter łapie jako manieryzm (klasa review), choć w tych tekstach są poprawne (nazwy, przykłady ilustrujące działanie narzędzia). Użycie: miodek lint --dict dictionary.project.json <pliki>."
+  },
+  "allow": [
+    "robust",
+    "leverage"
+  ],
+  "review": []
+}
