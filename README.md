@@ -99,6 +99,27 @@ Po instalacji przez uvx (Tryb C) zadziała też bez klonu repo. Z klonu repo, be
 
 Flaga `--lang` przyjmuje `pl`, `en` lub `both`. Można podać kilka ścieżek naraz.
 
+#### Batch: katalog, wzorzec, raport zbiorczy
+
+Linter przyjmuje wiele ścieżek, wzorce glob i całe katalogi (rekursywnie po `*.md` i `*.txt`), więc audyt dużego wolumenu to jedno polecenie:
+
+```bash
+miodek lint ./content            # cały katalog rekurencyjnie
+miodek lint "**/*.md"            # wzorzec glob
+```
+
+Kod wyjścia jest zbiorczy: `1`, gdy którykolwiek plik kończy się werdyktem `FAIL`/`FAIL-HARD`, więc nadaje się wprost jako bramka jakości na całym drzewie. Flaga `--report` dokłada po blokach per-plik zbiorczy agregat `== BATCH ==`: rozkład werdyktów, sumy słów i trafień, najbardziej problematyczne pliki oraz najczęstsze reguły. W trybie `--format json` ten agregat trafia do klucza `batch`. Bez `--report` wyjście jest niezmienione.
+
+```bash
+miodek lint --report ./content
+```
+
+#### Pozostałe flagi
+
+- `--profile NAZWA` — profil progów z `config.json` (np. `default`, `luzny`, `ostry`). Domyślnie `active_profile` z konfiguracji.
+- `--dict slownik.json` — słownik domenowy jako warstwa nadrzędna terminów (opis niżej). Domyślnie brak słownika oznacza obecne zachowanie.
+- `--format manifest|json` — format wyjścia (domyślnie `manifest`).
+
 ### Interpretacja manifestu i werdyktu
 
 Manifest to jedna linia na trafienie:
@@ -152,7 +173,7 @@ W roli `pre-commit` zatrzyma commit, gdy któryś plik prozy ma twardy bloker. B
 
 ## Bramka CI na merge request (F2)
 
-Druga bramka działa na pull requeście, nie przy zapisie. Workflow `.github/workflows/miodek-gate.yml` (GitHub Actions, trigger `pull_request`) liczy pliki prozy (`.md`/`.txt`) ZMIENIONE w PR względem bazy, woła na nich `ai_linter.py` i FAIL-uje check przy PEŁNYM werdykcie. Sterownik to `tools/ci_gate.py` (zero zależności, czysta biblioteka standardowa plus git).
+Druga bramka działa na pull requeście, nie przy zapisie. Workflow `.github/workflows/miodek-gate.yml` (GitHub Actions, trigger `pull_request`) liczy pliki prozy (`.md`/`.txt`) ZMIENIONE w PR względem bazy, woła na nich linter i FAIL-uje check przy PEŁNYM werdykcie. Sterownik to moduł `miodek.ci_gate`, wołany `python3 -m miodek.ci_gate` (zero zależności, czysta biblioteka standardowa plus git). To sterownik CI, więc świadomie nie ma go w dispatcherze `miodek`.
 
 Kluczowa różnica wobec write-time. Bramka CI zatrzymuje cały pełny werdykt, czyli `FAIL` oraz `FAIL-HARD`, a więc także samą gęstość ponad próg, nie tylko twarde blokery. To odwrotna polityka niż write-time, która gęstość przepuszcza. Z tabeli trzech bramek (sekcja wyżej) bierze wiersz „CI": pełny werdykt, łapie też samą gęstość. Trzecią bramkę, przed publikacją (z opcjonalnym osądem modelu Stage 2), opisuje sekcja „Bramka przed publikacją (F3)" niżej.
 
@@ -175,15 +196,15 @@ Kody wyjścia `ci_gate.py` (równe kodom lintera):
 Użycie ręczne i w self-teście (jawne ścieżki):
 
 ```bash
-python3 tools/ci_gate.py plik.md notatka.txt        # exit 1 przy pełnym werdykcie FAIL
-python3 tools/ci_gate.py --changed --base origin/main   # tryb CI: diff względem bazy
+python3 -m miodek.ci_gate plik.md notatka.txt        # exit 1 przy pełnym werdykcie FAIL
+python3 -m miodek.ci_gate --changed --base origin/main   # tryb CI: diff względem bazy
 ```
 
 W przeciwieństwie do write-time bramka CI nie jest fail-open: błąd reguł lub konfiguracji lintera kończy check niezerowo, bo to bramka jakości przed mergem. Self-test rdzenia: `tools/check_ci_gate.py` (wpięty do `tests/run_tests.sh`).
 
 ## Bramka przed publikacją (F3)
 
-Trzecia i najsurowsza bramka to wymienny krok wołany PRZED publikacją prozy (wysyłka na Confluence, Notion lub stronę). Inny przepływ publikacji woła ją na jawnie wskazanych plikach „do publikacji", żeby zatrzymać tekst nieprzechodzący jakości. Sterownik to `tools/publish_gate.py` (zero zależności, czysta biblioteka standardowa). Bramka ma dwa poziomy.
+Trzecia i najsurowsza bramka to wymienny krok wołany PRZED publikacją prozy (wysyłka na Confluence, Notion lub stronę). Inny przepływ publikacji woła ją na jawnie wskazanych plikach „do publikacji", żeby zatrzymać tekst nieprzechodzący jakości. Sterownik to podkomenda `miodek gate` (moduł `miodek.publish_gate`, zero zależności, czysta biblioteka standardowa). Bramka ma dwa poziomy.
 
 Stage 1 działa zawsze. To pełny werdykt lintera na podanych plikach, ta sama polityka co F2, tylko na jawnych plikach zamiast na diffie. Werdykt `FAIL` albo `FAIL-HARD` (blokery lub gęstość ponad próg) zamyka publikację. Stage 1 reużywa `ci_gate.filter_prose` i `ci_gate.run_linter`, więc polityka pełnego werdyktu jest jednym kodem dla F2 i F3.
 
@@ -210,9 +231,9 @@ Kody wyjścia `publish_gate.py`:
 Wpięcie w przepływ publikacji i ręczne użycie:
 
 ```bash
-python3 tools/publish_gate.py artykul.md notatka.txt          # sam Stage 1 (zero sieci)
-python3 tools/publish_gate.py --stage2 artykul.md             # plus osąd Stage 2 (silnik z config.json)
-python3 tools/publish_gate.py --stage2 --engine ollama art.md # Stage 2 na wskazanym silniku
+miodek gate artykul.md notatka.txt          # sam Stage 1 (zero sieci)
+miodek gate --stage2 artykul.md             # plus osąd Stage 2 (silnik z config.json)
+miodek gate --stage2 --engine ollama art.md # Stage 2 na wskazanym silniku
 ```
 
 Przepływ publikacji woła ten krok przed wysyłką i przerywa wysyłkę na kodzie niezerowym. Jak F2, F3 nie jest fail-open: błąd reguł albo budowy silnika kończy się niezerowo, bo to bramka jakości. Self-test rdzenia: `tools/check_publish_gate.py` (wpięty do `tests/run_tests.sh`, w całości offline na atrapie silnika).
@@ -263,10 +284,10 @@ python3 tools/measure_health.py --manifest manifest.json --alarm 0.08    # nadpi
 
 ### Eksporter metryk Prometheus i dashboard Grafany (KAN-219)
 
-Te same metryki da się podać na dashboard. `tools/metrics_exporter.py` to eksporter HTTP zero-dep (biblioteka standardowa, `http.server`), który na ścieżce `/metrics` wystawia format tekstowy Prometheus. Na scrape buduje manifest (uruchamia linter na korpusie, z krótkim cache, żeby nie mielić go na każde zapytanie), liczy `metrics.py` i doczytuje log Stage 2. Stack Prometheus plus Grafana zakładamy gotowy; tu dostarczamy artefakty do wpięcia.
+Te same metryki da się podać na dashboard. Polecenie `miodek-exporter` (moduł `miodek.metrics_exporter`, osobny entry point) to eksporter HTTP zero-dep (biblioteka standardowa, `http.server`), który na ścieżce `/metrics` wystawia format tekstowy Prometheus. Czyta `--corpus`, `--port` i `--log` także ze zmiennych środowiskowych (`MIODEK_CORPUS`, `MIODEK_PORT`, `MIODEK_LOG`). Na scrape buduje manifest (uruchamia linter na korpusie, z krótkim cache, żeby nie mielić go na każde zapytanie), liczy `metrics.py` i doczytuje log Stage 2. Stack Prometheus plus Grafana zakładamy gotowy; tu dostarczamy artefakty do wpięcia.
 
 ```bash
-MIODEK_CORPUS=. MIODEK_PORT=9112 python3 tools/metrics_exporter.py
+miodek-exporter --corpus . --port 9112
 curl -s localhost:9112/metrics | head
 ```
 
@@ -276,10 +297,10 @@ Uczciwość danych: E1, E2 i E4 są realne od zaraz (z manifestu Stage 1, zero k
 
 Artefakty wdrożeniowe (jednostka systemd eksportera, fragment scrape do `prometheus.yml`, provider provisioningu i dashboard Grafany) leżą w `deploy/`. Runbook wdrożenia i pełen schemat metryk: `deploy/README.md` oraz `metrics-exporter.schema.md`.
 
-**Runner Stage 2 (`runner.py`).** Spina linter z osądem modelu. Czyta manifest, wybiera segmenty `review` (tą samą funkcją co współczynnik redukcji), woła wymienialny silnik osądu i stosuje bramkę „PASS z uwagami to NIE PASS". Domyślny silnik to deterministyczna atrapa (bez sieci); realny silnik wpina się przez `engines.JudgeEngine` bez zmian w runnerze.
+**Runner Stage 2 (moduł `miodek.runner`, wołany `python3 -m miodek.runner`).** Spina linter z osądem modelu. Czyta manifest, wybiera segmenty `review` (tą samą funkcją co współczynnik redukcji), woła wymienialny silnik osądu i stosuje bramkę „PASS z uwagami to NIE PASS". Domyślny silnik to deterministyczna atrapa (bez sieci); realny silnik wpina się przez `engines.JudgeEngine` bez zmian w runnerze.
 
 ```bash
-python3 runner.py --manifest manifest.json        # exit 1 gdy bramka FAIL
+python3 -m miodek.runner --manifest manifest.json        # exit 1 gdy bramka FAIL
 ```
 
 **Realny silnik osądu (`engines.py`).** Domyślnie runner woła atrapę (bez kosztu, bez sieci). Realny model serwowany po HTTP wpina się przez dwa adaptery zero-dep (biblioteka standardowa, `urllib`), wybierane sekcją `stage2` w `config.json`. Klucz API czytany jest wyłącznie ze zmiennej środowiskowej (`api_key_env`), nigdy z pliku.
@@ -296,7 +317,7 @@ Endpoint zgodny z OpenAI Chat Completions (OpenRouter, vLLM, RunPod):
 
 ```bash
 export OPENROUTER_API_KEY=...                      # sekret czytany z ENV
-python3 runner.py --manifest manifest.json --engine openai
+python3 -m miodek.runner --manifest manifest.json --engine openai
 ```
 
 Ollama (lokalna albo zdalna na RunPodzie) — `base_url` wskazuje host Ollamy:
@@ -306,7 +327,7 @@ Ollama (lokalna albo zdalna na RunPodzie) — `base_url` wskazuje host Ollamy:
 ```
 
 ```bash
-python3 runner.py --manifest manifest.json --engine ollama
+python3 -m miodek.runner --manifest manifest.json --engine ollama
 ```
 
 `--engine` na CLI nadpisuje wybór z configu; brak sekcji `stage2` znaczy atrapa (zero zmiany). Adaptery, prompt osądu i fail-safe parsowania opisuje `engines.schema.md`. Uwaga: realny smoke (Bielik) wymaga dostępnego endpointu, np. modelu serwowanego na RunPodzie; testy w repo działają w pełni offline na atrapie HTTP, bez wywołań sieci.
@@ -331,7 +352,7 @@ Gdy model serwowany jest na podzie RunPod, pod może bić pod prąd GPU także m
 
 ```bash
 export RUNPOD_API_KEY=...                          # sekret WYŁĄCZNIE z ENV, nigdy z pliku
-python3 runner.py --manifest manifest.json --engine ollama
+python3 -m miodek.runner --manifest manifest.json --engine ollama
 ```
 
 Gdy `manage: true` i silnik jest zdalny (`ollama`/`openai`), runner owija przebieg w menedżer kontekstu, który gasi pod ZAWSZE po wsadzie. Odporność na padnięcie procesu zbudowano warstwowo: blok `finally` (gasi też przy wyjątku), handlery SIGINT/SIGTERM (gaszą przed zniknięciem procesu i przywracają poprzedni handler), oraz backstop NA PODZIE (`tools/runpod_idle_watchdog.sh`) gaszący pod po `idle_backstop_s` bezczynności na wypadek `kill -9`. Polityka `on_finish`: `stop` (domyślne, GPU gaśnie, model zostaje na dysku) albo `terminate` (trwała kasacja). Błąd gaszenia leci głośno na stderr, bo to bramka kosztowa. Klucz API czytany wyłącznie z ENV (`RUNPOD_API_KEY`). Szczegóły: `runpod-lifecycle.schema.md`; instalacja watchdoga na podzie: `tools/runpod_idle_watchdog.README.md`.
@@ -343,9 +364,9 @@ Dotąd, żeby osądzić tekst realnym Bielikiem, trzeba było ręcznie: postawi�
 Parametry poda czyta podsekcja `stage2.runpod` z `config.json` (wolumen, data center, model, GPU, mount, obraz) z bezpiecznymi domyślnymi, więc flaga działa od ręki. Cykl to create, czekanie na Ollamę, zapewnienie modelu, przebieg, terminate. Teardown jest gwarantowany tą samą warstwową odpornością co auto-offload (blok `finally`, handlery sygnałów, backstop na podzie), z dodatkowym sprzątaniem osieroconego poda: gdy Ollama nie wstanie albo modelu nie da się zapewnić w fazie wejścia, już utworzony pod jest terminowany przed zgłoszeniem błędu. Klucz API wyłącznie z ENV (`RUNPOD_API_KEY`).
 
 ```bash
-python3 runner.py --manifest manifest.json --runpod            # osąd na świeżym efemerycznym Bieliku
-python3 corrector.py --file artykul.md --runpod                # korekta realnym Bielikiem, pod gaśnie sam
-python3 tools/publish_gate.py --runpod artykul.md              # --runpod sam włącza Stage 2 na podzie
+python3 -m miodek.runner --manifest manifest.json --runpod            # osąd na świeżym efemerycznym Bieliku
+miodek correct --file artykul.md --runpod                # korekta realnym Bielikiem, pod gaśnie sam
+miodek gate --runpod artykul.md              # --runpod sam włącza Stage 2 na podzie
 ```
 
 Flaga nadpisuje `--engine` i sekcję `lifecycle` (efemeryczny pod sam jest owijaczem przebiegu). Bez `--runpod` zachowanie jest bez zmian: domyślnie stub, zero sieci, zero kosztu. Szczegóły cyklu i testu offline: `runpod-lifecycle.schema.md` (sekcja „Tryb EFEMERYCZNY"); parametry poda: `config.schema.md` (podsekcja `stage2.runpod`).
@@ -372,16 +393,16 @@ Schematy: `metrics.schema.md` (redukcja, atrybucja, zdrowie), `runner.schema.md`
 
 ## Korektor: pętla audyt, poprawka, ponowny audyt (G2)
 
-Dotąd skill tylko wytykał manieryzm. Korektor (`corrector.py`) zamyka pętlę nad linterem i osądem modelu, więc narzędzie samo doprowadza tekst do czysta. Jedna iteracja to audyt (Stage 1 plus osąd Stage 2), przepisanie spornych akapitów przez silnik, zapis zwrotny przez adapter i ponowny audyt na poprawionym tekście.
+Dotąd skill tylko wytykał manieryzm. Korektor (podkomenda `miodek correct`, moduł `miodek.corrector`) zamyka pętlę nad linterem i osądem modelu, więc narzędzie samo doprowadza tekst do czysta. Jedna iteracja to audyt (Stage 1 plus osąd Stage 2), przepisanie spornych akapitów przez silnik, zapis zwrotny przez adapter i ponowny audyt na poprawionym tekście.
 
 Pętla zatrzymuje się w jednym z trzech przypadków. Pierwszy to PASS, czyli bramka Stage 2 nie zwraca już segmentów do przepisania. Drugi to brak postępu, gdy żadne przepisanie nie zmieniło tekstu w danej iteracji (ochrona przed pętlą bez końca). Trzeci to wyczerpanie limitu iteracji (domyślnie 4, konfigurowalne). Zwracany jest finalny tekst plus raport: liczba iteracji, czy osiągnięto PASS, powód zatrzymania, ślad ile segmentów poprawiono w każdej iteracji.
 
 Silnik jest wymienny przez ten sam interfejs co osąd Stage 2. Korektor woła go wyłącznie przez `judge` i `rewrite`. Domyślny silnik z configu (`stub`) daje deterministyczną atrapę offline (`StubRewriteEngine`), która neutralizuje wykryty wzorzec tak, by ponowny audyt go nie łapał, więc pętla zbiega bez sieci. Realny model (`openai`/`ollama`) wpina się bez zmiany pętli: dostaje osobny prompt po polsku „przepisz akapit usuwając manieryzm, zachowaj sens i rejestr".
 
 ```bash
-python3 corrector.py --file artykul.md --engine ollama  # korekta realnym modelem (sieć)
-python3 corrector.py --file artykul.md --runpod         # realny Bielik na efemerycznym podzie (KAN-222)
-python3 corrector.py --file artykul.md --runpod --in-place  # plus zapis poprawionego tekstu do pliku
+miodek correct --file artykul.md --engine ollama  # korekta realnym modelem (sieć)
+miodek correct --file artykul.md --runpod         # realny Bielik na efemerycznym podzie (KAN-222)
+miodek correct --file artykul.md --runpod --in-place  # plus zapis poprawionego tekstu do pliku
 ```
 
 Bramka UX (KAN-222): korektor mieli tekst, więc na atrapie (stub) nic realnie nie poprawi i nie wolno mu udawać pracy. Bez `--runpod` i bez jawnie wskazanego realnego silnika (`stage2.engine` na `ollama`/`openai` w `config.json` albo `--engine ollama/openai`) korektor odmawia z kodem wyjścia 2 i kieruje: użyj `--runpod` (efemeryczny Bielik jednym krokiem) albo ustaw realny silnik. Stub zostaje trybem testowym, nie ścieżką użytkownika (furtka self-testów: zmienna `MIODEK_ALLOW_STUB_CORRECTOR=1`). Runner i bramka publikacji tej odmowy nie mają, bo osąd na atrapie bywa tam legalny jako diagnostyka. Odmowa dotyczy tylko korektora, który przepisuje tekst.
@@ -392,6 +413,8 @@ Jakość przepisania zależy od silnika. Atrapa offline (`stub`) neutralizuje wz
 
 Dwa wzmocnienia chronią pętlę przed gadatliwym modelem. Parser odpowiedzi (`clean_rewrite_reply`) odcina meta-preambuły i komentarze, na przykład „Poprawiona wersja:” czy „Oto poprawiony akapit:”, a gdy model poda dwie wersje, bierze pierwszy zwarty akapit prozy. Zestaw fraz jest zamknięty i etykieta musi być krótka, więc legalne zdanie z dwukropkiem nie jest zjadane; pusta lub bezsensowna odpowiedź wciąż daje fallback na oryginał. Strażnik regresji po każdym przepisaniu robi tani audyt Stage 1 obu wersji akapitu i odrzuca poprawkę, która pogarsza, czyli ma więcej trafień lub dokłada bloker. Realny model bywa „leczy chorobę, dokłada gorączkę”: przepisując dorzuca nowy manieryzm. Strażnik akceptuje tylko poprawki nie pogarszające, dzięki czemu taki rozjazd kończy się brakiem postępu zamiast biegu do limitu iteracji. Zmiana neutralna przechodzi, więc realny postęp bez zbieżności nadal trafia na limit.
 
+Flagi korektora: `--file` (plik wejściowy), `--engine` (silnik osądu, np. `ollama`, `openai`), `--runpod` (efemeryczny pod z Bielikiem na czas korekty), `--in-place` (zapis poprawy z powrotem do pliku zamiast na stdout), `--max-iter N` (limit iteracji pętli; domyślnie `stage2.max_iter` z `config.json`), oraz `--lang`, `--profile`, `--dict`, `--config` (jak w linterze).
+
 Finalny tekst leci na stdout, raport na stderr. Exit 0, gdy osiągnięto PASS, 1 w przeciwnym razie (gate-owalne). Kontrakt pętli, mapowanie segmentu na edycję i warunki zatrzymania opisuje `corrector.schema.md`; zdolność `rewrite` w silniku jest w `engines.schema.md`. Self-test offline: `tools/check_corrector.py` (wpięty do `tests/run_tests.sh`).
 
 ## LanguageTool: pełna korekta polszczyzny na żądanie (G4)
@@ -399,18 +422,44 @@ Finalny tekst leci na stdout, raport na stderr. Exit 0, gdy osiągnięto PASS, 1
 Rdzeń skilla jest lekki i celuje w manieryzm AI. Czasem przyda się pełna korekta polszczyzny: literówki, gramatyka, interpunkcja. Do tego jest opcjonalny dostawca na żądanie: klient LanguageTool (`languagetool.py`). To narzędzie pomocnicze poza bramką. Nie jest częścią Stage 1, Stage 2 ani żadnej bramki jakości i nie odpala się nigdzie automatycznie. Operator uruchamia je świadomie, gdy chce drugiej pary oczu nad polszczyzną.
 
 ```bash
-python3 tools/languagetool_check.py --file artykul.md
-python3 tools/languagetool_check.py --text "Mam pewien błont ortograficzny."
-python3 tools/languagetool_check.py --file artykul.md --json
-python3 tools/languagetool_check.py --text "..." --endpoint http://localhost:8081/v2/check
-LANGUAGETOOL_ENDPOINT=http://localhost:8081/v2/check python3 tools/languagetool_check.py --file artykul.md
+miodek lt --file artykul.md
+miodek lt --text "Mam pewien błont ortograficzny."
+miodek lt --file artykul.md --json
+miodek lt --text "..." --endpoint http://localhost:8081/v2/check
+LANGUAGETOOL_ENDPOINT=http://localhost:8081/v2/check miodek lt --file artykul.md
 ```
 
-Klient jest zero-dep (biblioteka standardowa, `urllib`) i odpytuje serwer LanguageTool po HTTP. Endpoint wybiera priorytet: flaga `--endpoint`, potem zmienna środowiskowa `LANGUAGETOOL_ENDPOINT`. Domyślnego endpointu NIE ma (KAN-225): bez wyboru klient zgłasza błąd, więc nie wysyła tekstu nigdzie domyślnie. Operator świadomie wskazuje jedną z dwóch dróg: lokalny serwer (np. `http://localhost:8081/v2/check`, tekst zostaje u niego) albo publiczne `api.languagetool.org` (wysyła tekst na cudze serwery). Wzór w `.env.example`. Zwraca strukturalne sugestie: pozycja, długość, komunikat, proponowane zamienniki, identyfikator reguły i kategorii. Parsowanie odpowiedzi jest odporne na brak pól. Realny serwer jest wołany wyłącznie przy faktycznym uruchomieniu; self-test (`tools/check_languagetool.py`) działa w pełni offline na atrapie transportu, bez wywołań sieci. Kontrakt: `languagetool.schema.md`.
+Klient jest zero-dep (biblioteka standardowa, `urllib`) i odpytuje serwer LanguageTool po HTTP. Endpoint wybiera priorytet: flaga `--endpoint`, potem zmienna środowiskowa `LANGUAGETOOL_ENDPOINT`. Domyślnego endpointu NIE ma (KAN-225): bez wyboru klient zgłasza błąd, więc nie wysyła tekstu nigdzie domyślnie. Operator świadomie wskazuje jedną z dwóch dróg: lokalny serwer (np. `http://localhost:8081/v2/check`, tekst zostaje u niego) albo publiczne `api.languagetool.org` (wysyła tekst na cudze serwery). Wzór w `.env.example`. Wejście wskazujesz flagą `--file` albo `--text`, kod języka flagą `--language` (domyślnie `pl-PL`), a `--json` daje wyjście maszynowe. Zwraca strukturalne sugestie: pozycja, długość, komunikat, proponowane zamienniki, identyfikator reguły i kategorii. Parsowanie odpowiedzi jest odporne na brak pól. Realny serwer jest wołany wyłącznie przy faktycznym uruchomieniu; self-test (`tools/check_languagetool.py`) działa w pełni offline na atrapie transportu, bez wywołań sieci. Kontrakt: `languagetool.schema.md`.
 
 ## Opcjonalna warstwa terminologii domenowej
 
-Skill obsługuje opcjonalny tryb z własnym słownikiem terminów branżowych. Jeśli posiadasz taki plik, terminy w nim zdefiniowane mają pierwszeństwo nad ogólnymi regułami dla swojej dziedziny. Bez słownika skill działa w trybie ogólnym: pełny audyt polszczyzny i manieryzmu AI. Słownik domenowy jest zewnętrzny i nie wchodzi w skład repozytorium.
+Niektóre terminy branżowe wyglądają jak manieryzm AI, choć w danej dziedzinie są poprawne (na przykład „robust" jako nazwa produktu albo „leverage" w finansach). Słownik domenowy pozwala je oznaczyć, żeby linter ich nie flagował. To warstwa nadrzędna nad regułami: gdy słownik mówi `allow`, trafienie markera na ten termin jest pomijane.
+
+Format to JSON (biblioteka standardowa, zero zależności, spójnie z `rules.json` i `config.json`):
+
+```json
+{
+  "provenance": { "projekt": "...", "wersja": "...", "data": "...", "autor": "...", "zrodlo": "..." },
+  "allow":  ["robust", "leverage"],
+  "review": ["termin do przejrzenia"]
+}
+```
+
+- `allow` — terminy nie flagowane (marker wygaszony, nawet gdy wygląda jak AI-tell).
+- `review` — terminy spychane do klasy `review` (informacyjne, nie blokują werdyktu).
+- `provenance` — metadane pochodzenia (kto, kiedy, skąd).
+
+Dopasowanie idzie po całym słowie, bez względu na wielkość liter. Wskazujesz słownik flagą `--dict`:
+
+```bash
+miodek lint --dict slownik.json --lang both ŚCIEŻKA_DO_PLIKU.md
+```
+
+Bez słownika skill działa w trybie ogólnym: pełny audyt polszczyzny i manieryzmu AI. Słownik jest zewnętrzny i nie wchodzi w skład repozytorium. Szkic słownika można zbudować z własnego korpusu narzędziem `tools/build_dict.py` (świadomie poza paczką, dla dewelopera): częstość proponuje kandydatów, a człowiek decyduje, co trafi do `allow`.
+
+```bash
+python3 tools/build_dict.py ./korpus --out slownik.json
+```
 
 ## Atrybucja i licencja
 
