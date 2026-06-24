@@ -24,9 +24,8 @@ dependencies = []
 Homepage = "https://github.com/researchanddeploy/sztuczny-miodek"
 
 [project.scripts]
-# Prowizoryczny punkt wejścia: dziś `miodek` = linter (Stage 1). KAN-228 zastąpi go dispatcherem
-# z podkomendami (miodek lint / correct / gate / lt) bez zmiany nazwy polecenia.
-miodek = "miodek.ai_linter:main"
+# Unified CLI (KAN-228): dispatcher z podkomendami miodek lint / correct / gate / lt.
+miodek = "miodek.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/miodek"]

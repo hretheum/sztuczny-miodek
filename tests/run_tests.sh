@@ -31,6 +31,13 @@ assert_verdict baseline_en_doc.md        FAIL both
 echo "== Regresja: kontrola (oczekiwane PASS, 0 false-positives) =="
 assert_verdict control_pl_clean.md       PASS pl
 
+echo "== Unified CLI miodek: dispatcher lint/correct/gate/lt, kody wyjścia (KAN-228) =="
+if python3 "$DIR/../tools/check_cli.py"; then
+  : # OK — komunikat wypisuje sam skrypt
+else
+  echo "FAIL CLI miodek — dispatcher nie deleguje lub gubi kody wyjścia podkomend (patrz wyżej)"; fail=1
+fi
+
 echo "== Dostęp do danych pakietu: centralny resources, podłączenie ai_linter/config (KAN-226) =="
 if python3 "$DIR/../tools/check_resources.py"; then
   : # OK — komunikat wypisuje sam skrypt

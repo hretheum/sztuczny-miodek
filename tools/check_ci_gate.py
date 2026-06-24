@@ -15,7 +15,7 @@ Pilnuje, by ci_gate.py:
         diff z samym czystym plikiem → exit 0,
         diff bez plików prozy → exit 0,
   (g) workflow .github/workflows/miodek-gate.yml istnieje i ma krytyczne pola
-      (pull_request, fetch-depth, ci_gate.py) — bez parsera YAML, prosty grep.
+      (pull_request, fetch-depth, miodek.ci_gate) — bez parsera YAML, prosty grep.
 
 Exit 1 na rozjeździe (gate w run_tests.sh).
 """
@@ -27,7 +27,12 @@ import sys
 import tempfile
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-CI_GATE = os.path.join(REPO_ROOT, "tools", "ci_gate.py")
+# ci_gate to moduł pakietu (KAN-228) — wołany przez -m z PYTHONPATH=src (absolutny, bo część
+# scenariuszy uruchamia go z cwd tymczasowego repo git).
+_SRC = os.path.join(REPO_ROOT, "src")
+_ENV = dict(os.environ)
+_ENV["PYTHONPATH"] = _SRC + (os.pathsep + _ENV["PYTHONPATH"] if _ENV.get("PYTHONPATH") else "")
+CI_GATE_CMD = [sys.executable, "-m", "miodek.ci_gate"]
 TESTS_DIR = os.path.join(REPO_ROOT, "tests")
 WORKFLOW = os.path.join(REPO_ROOT, ".github", "workflows", "miodek-gate.yml")
 
@@ -39,7 +44,7 @@ DENSITY_ONLY = os.path.join(TESTS_DIR, "triad_eval.md")       # sama gęstość 
 def rc_paths(*paths):
     """Uruchom ci_gate.py w trybie jawnych ścieżek, zwróć kod wyjścia."""
     return subprocess.run(
-        [sys.executable, CI_GATE, *paths], capture_output=True, text=True
+        [*CI_GATE_CMD, *paths], capture_output=True, text=True, env=_ENV
     ).returncode
 
 
@@ -75,7 +80,7 @@ def main():
         fails.append("(d) mieszanka (czysty + bloker) powinna dać exit 1.")
 
     # (e1) ścieżka nie-prozy (.py) → exit 0 (filtr odsiewa, brak prozy = zielono)
-    if rc_paths(CI_GATE) != 0:
+    if rc_paths(os.path.abspath(__file__)) != 0:
         fails.append("(e) jawna ścieżka .py (nie-proza) powinna dać exit 0 (brak prozy nie wywraca).")
     # (e2) pusta lista argumentów → exit 0
     if rc_paths() != 0:
@@ -102,8 +107,8 @@ def main():
             _git(["add", "-A"], tmp)
             _git(["commit", "-q", "-m", "brudny raport"], tmp)
             r = subprocess.run(
-                [sys.executable, CI_GATE, "--changed", "--base", "main", "--head", "HEAD"],
-                cwd=tmp, capture_output=True, text=True,
+                [*CI_GATE_CMD, "--changed", "--base", "main", "--head", "HEAD"],
+                cwd=tmp, capture_output=True, text=True, env=_ENV,
             ).returncode
             if r != 1:
                 fails.append(f"(f1) --changed z brudnym plikiem prozy powinno dać exit 1, było {r}.")
@@ -115,8 +120,8 @@ def main():
             _git(["add", "-A"], tmp)
             _git(["commit", "-q", "-m", "czysty doc2"], tmp)
             r = subprocess.run(
-                [sys.executable, CI_GATE, "--changed", "--base", "main", "--head", "HEAD"],
-                cwd=tmp, capture_output=True, text=True,
+                [*CI_GATE_CMD, "--changed", "--base", "main", "--head", "HEAD"],
+                cwd=tmp, capture_output=True, text=True, env=_ENV,
             ).returncode
             if r != 0:
                 fails.append(f"(f2) --changed z samym czystym plikiem prozy powinno dać exit 0, było {r}.")
@@ -129,8 +134,8 @@ def main():
             _git(["add", "-A"], tmp)
             _git(["commit", "-q", "-m", "tylko kod"], tmp)
             r = subprocess.run(
-                [sys.executable, CI_GATE, "--changed", "--base", "main", "--head", "HEAD"],
-                cwd=tmp, capture_output=True, text=True,
+                [*CI_GATE_CMD, "--changed", "--base", "main", "--head", "HEAD"],
+                cwd=tmp, capture_output=True, text=True, env=_ENV,
             ).returncode
             if r != 0:
                 fails.append(f"(f3) --changed bez plików prozy powinno dać exit 0 (brak prozy), było {r}.")
@@ -143,7 +148,7 @@ def main():
     else:
         with open(WORKFLOW, encoding="utf-8") as fh:
             wf = fh.read()
-        for needle in ("pull_request", "fetch-depth", "ci_gate.py", "--changed"):
+        for needle in ("pull_request", "fetch-depth", "miodek.ci_gate", "--changed"):
             if needle not in wf:
                 fails.append(f"(g) workflow nie zawiera krytycznego pola '{needle}'.")
 

@@ -361,10 +361,7 @@ def main():
     # === 12: publish_gate --runpod bez RUNPOD_API_KEY → exit 2 (NIE traceback) ===
     # RuntimeError z managed_ephemeral_pod.__enter__ (brak klucza) musi zmapować się na czysty
     # exit 2, nie wyciec tracebackiem (review KAN-222, drobna #2).
-    _tools_dir = os.path.dirname(os.path.abspath(__file__))
-    if _tools_dir not in sys.path:
-        sys.path.insert(0, _tools_dir)
-    import publish_gate as pg  # noqa: E402
+    from miodek import publish_gate as pg  # moduł pakietu (KAN-228)
     with tempfile.TemporaryDirectory() as tmp:
         proza = os.path.join(tmp, "tekst.md")
         with open(proza, "w", encoding="utf-8") as f:

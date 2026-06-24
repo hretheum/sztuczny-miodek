@@ -23,11 +23,7 @@ import json
 import os
 import sys
 
-REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if REPO_ROOT not in sys.path:
-    sys.path.insert(0, os.path.join(REPO_ROOT, "src"))
-
-from miodek import languagetool  # noqa: E402
+from miodek import languagetool
 
 
 def _format_suggestion(s) -> str:

@@ -30,4 +30,5 @@ jobs:
         run: |
           # Upewnij się, że ref bazy PR istnieje lokalnie (checkout daje HEAD merge).
           git fetch --no-tags --depth=1 origin "$BASE_REF"
-          python3 tools/ci_gate.py --changed --base "origin/$BASE_REF" --head HEAD
+          # ci_gate to moduł pakietu (KAN-228); pakiet żyje w src/ (bez instalacji wystarcza PYTHONPATH).
+          PYTHONPATH=src python3 -m miodek.ci_gate --changed --base "origin/$BASE_REF" --head HEAD

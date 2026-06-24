@@ -45,20 +45,10 @@ import os
 import subprocess
 import sys
 
-REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-
-# Linter uruchamiany jako MODUŁ pakietu (KAN-227): ai_linter ma importy pakietowe, więc nie da się
-# go odpalić jako luźny plik. Subprocess dostaje PYTHONPATH wskazujący src, by znalazł pakiet miodek.
+# Linter uruchamiany jako MODUŁ pakietu (miodek.ai_linter ma importy pakietowe — nie odpala się jako
+# luźny plik). ci_gate jest częścią pakietu (KAN-228), więc subprocess dziedziczy środowisko procesu:
+# po instalacji pakiet jest na ścieżce, a z repo wystarcza PYTHONPATH=src. Bez własnego helpera env.
 LINTER_MODULE = "miodek.ai_linter"
-_SRC_DIR = os.path.join(REPO_ROOT, "src")
-
-
-def _linter_env():
-    """Środowisko dla subprocess lintera: PYTHONPATH ze src na czele (pakiet miodek znajdowalny)."""
-    env = dict(os.environ)
-    prev = env.get("PYTHONPATH", "")
-    env["PYTHONPATH"] = _SRC_DIR + (os.pathsep + prev if prev else "")
-    return env
 
 # Rozszerzenia prozy, które bramka lintuje. Linter sam skanuje szerzej (.html itp.),
 # ale na merge request pilnujemy prozy: .md/.txt.
@@ -136,7 +126,7 @@ def run_linter(files, lang, profile, dict_path):
     if dict_path:
         cmd += ["--dict", dict_path]
     cmd += files
-    proc = subprocess.run(cmd, capture_output=True, text=True, env=_linter_env())
+    proc = subprocess.run(cmd, capture_output=True, text=True)
     # Manifest lintera na stdout — do logu CI.
     if proc.stdout:
         sys.stdout.write(proc.stdout)
@@ -194,7 +184,11 @@ def main():
 
     print(f"[ci_gate] Bramka jakości na {len(files)} plik(ach) prozy ({scope}):")
     for f in files:
-        print(f"  - {os.path.relpath(f, REPO_ROOT)}")
+        try:
+            rel = os.path.relpath(f)
+        except ValueError:
+            rel = f  # inny dysk (Windows) — pełna ścieżka
+        print(f"  - {rel}")
     print()
 
     rc = run_linter(files, args.lang, args.profile, args.dict_path)

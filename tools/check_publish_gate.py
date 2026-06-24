@@ -33,7 +33,11 @@ import sys
 import tempfile
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-PUBLISH_GATE = os.path.join(REPO_ROOT, "tools", "publish_gate.py")
+# publish_gate to moduł pakietu (KAN-228) — wołany przez -m z PYTHONPATH=src.
+_SRC = os.path.join(REPO_ROOT, "src")
+_ENV = dict(os.environ)
+_ENV["PYTHONPATH"] = _SRC + (os.pathsep + _ENV["PYTHONPATH"] if _ENV.get("PYTHONPATH") else "")
+PUBLISH_GATE_CMD = [sys.executable, "-m", "miodek.publish_gate"]
 TESTS_DIR = os.path.join(REPO_ROOT, "tests")
 README = os.path.join(REPO_ROOT, "README.md")
 
@@ -46,7 +50,7 @@ REVIEW_CLEAN = os.path.join(TESTS_DIR, "sentence_eval.md")    # Stage 1 PASS + t
 def rc(*args):
     """Uruchom publish_gate.py z podanymi argumentami, zwróć kod wyjścia."""
     return subprocess.run(
-        [sys.executable, PUBLISH_GATE, *args], capture_output=True, text=True
+        [*PUBLISH_GATE_CMD, *args], capture_output=True, text=True, env=_ENV
     ).returncode
 
 
@@ -71,7 +75,7 @@ def main():
         fails.append("(d) mieszanka (czysty + bloker) powinna dać exit 1.")
 
     # (e1) ścieżka nie-proza (.py) → exit 0
-    if rc(PUBLISH_GATE) != 0:
+    if rc(os.path.abspath(__file__)) != 0:
         fails.append("(e) jawna ścieżka .py (nie-proza) powinna dać exit 0 (brak prozy = przejście).")
     # (e2) pusta lista → exit 0
     if rc() != 0:
