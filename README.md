@@ -53,21 +53,26 @@ Oba tryby korzystają z tego samego `SKILL.md` w korzeniu repo. Katalog `.claude
 
 ### Tryb C — CLI przez uvx
 
-Narzędzie linii poleceń `miodek` można uruchomić bez ręcznej instalacji, wprost ze źródła git. Wymaga [uv](https://docs.astral.sh/uv/). Źródłem jest fork roboczy (paczka żyje na gałęzi `epic-a-reguly-jako-dane`, docelowo trafi do upstreamu):
+Narzędzie linii poleceń `miodek` można uruchomić bez ręcznej instalacji. Wymaga [uv](https://docs.astral.sh/uv/). Najprościej, wprost z PyPI:
+
+```bash
+uvx miodek lint --lang both ŚCIEŻKA_DO_PLIKU.md
+```
+
+`uvx` pobiera paczkę do cache i uruchamia ulotnie, bez instalowania niczego na stałe. Polecenie `miodek` to dispatcher z podkomendami `lint`, `correct`, `gate`, `lt`. Eksporter metryk Prometheus jest osobnym poleceniem `miodek-exporter`:
+
+```bash
+uvx --from miodek miodek-exporter --help
+```
+
+Alternatywnie, wprost ze źródła git (np. dla gałęzi roboczej przed wydaniem na PyPI):
 
 ```bash
 uvx --from git+https://github.com/hretheum/sztuczny-miodek@epic-a-reguly-jako-dane \
   miodek lint --lang both ŚCIEŻKA_DO_PLIKU.md
 ```
 
-Polecenie `miodek` to dispatcher z podkomendami `lint`, `correct`, `gate`, `lt`. Eksporter metryk Prometheus jest osobnym poleceniem `miodek-exporter`:
-
-```bash
-uvx --from git+https://github.com/hretheum/sztuczny-miodek@epic-a-reguly-jako-dane \
-  miodek-exporter --help
-```
-
-Rdzeń nie ma żadnych zależności (sama biblioteka standardowa). Warstwy opcjonalne wydzielają extras `[exporter]` i `[lt]`. Są one dziś puste, bo wszystkie komponenty działają na bibliotece standardowej, więc instalacja z extra (`uv tool install "sztuczny-miodek[exporter] @ git+https://github.com/hretheum/sztuczny-miodek@epic-a-reguly-jako-dane"`) daje na razie ten sam wynik co bez niego. Powiązanie z homelabem (quadlet, systemd) zostaje poza paczką, deklaratywnie w repozytorium infrastruktury.
+Rdzeń nie ma żadnych zależności (sama biblioteka standardowa). Warstwy opcjonalne wydzielają extras `[exporter]` i `[lt]`. Są one dziś puste, bo wszystkie komponenty działają na bibliotece standardowej, więc instalacja z extra (`uv tool install "miodek[exporter]"`) daje na razie ten sam wynik co bez niego. Powiązanie z homelabem (quadlet, systemd) zostaje poza paczką, deklaratywnie w repozytorium infrastruktury.
 
 ## Użycie
 

@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "sztuczny-miodek"
+name = "miodek"
 version = "1.1.0"
 description = "Audyt polszczyzny i eradykacja manieryzmu AI (AI-tells) w tekstach PL/EN — deterministyczny linter plus opcjonalny osąd modelu."
 readme = "README.md"
