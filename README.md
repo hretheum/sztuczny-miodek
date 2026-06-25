@@ -157,7 +157,7 @@ Pełny opis warstw zaawansowanych żyje w katalogu `docs/`. Pełną listę flag 
 - [Stage 2: osąd modelu, silniki, korekta](docs/stage2.md) — runner, wymienne silniki, RunPod, routing apelacyjny, korektor, LanguageTool.
 - [Ekonomia i obserwowalność](docs/observability.md) — współczynnik redukcji, metryki z manifestu, eksporter Prometheus i dashboard.
 - [Słownik domenowy](docs/dictionary.md) — warstwa terminologii, format JSON, budowa przez `miodek build-dict`.
-- [Audyt i korekta stron Confluence](docs/confluence.md) — `miodek confluence pull` (audyt) i `correct` (korekta z zapisem zwrotnym, dry-run + potwierdzenie).
+- [Audyt i korekta stron Confluence](docs/confluence.md) — `miodek confluence pull` (audyt) i `correct` (korekta z zapisem zwrotnym, dry-run + potwierdzenie); wiele instancji przez `--instance` (nazwane sloty `CONFLUENCE_<NAZWA>_*` w env).
 - [Interfejs adaptera](docs/ADAPTER-INTERFACE.md) — adaptery wejścia i wyjścia, segmentacja.
 - [Kalibracja progów](docs/THRESHOLD-CALIBRATION.md) — metodyka strojenia progów na korpusie.
 - [Współtworzenie](CONTRIBUTING.md) — bramka jakości, testy, styl, pull requesty.
