@@ -76,6 +76,8 @@ Wywołanie: `/sztuczny-miodek:sztuczny-miodek`. Aktualizacja: `/plugin update sz
 
 Oba tryby korzystają z tego samego `SKILL.md` w korzeniu repo. Katalog `.claude-plugin/` jest używany tylko w trybie B.
 
+Plugin daje też slash commands per warstwa (każda woła `uvx miodek <podkomenda>`): `/sztuczny-miodek:lint`, `:gate`, `:lt`, `:build-dict`, `:confluence-pull` (deterministyczne, bez modelu) oraz `:correct`, `:confluence-correct` (Stage 2, z modelem). Warstwy deterministyczne nie zużywają tokenów na sam skan.
+
 ### Tryb C — CLI przez uvx
 
 Narzędzie linii poleceń `miodek` można uruchomić bez ręcznej instalacji. Wymaga [uv](https://docs.astral.sh/uv/). Najprościej, wprost z PyPI:
