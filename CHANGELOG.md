@@ -5,6 +5,11 @@ wersjonowanie zgodne z [SemVer](https://semver.org/lang/pl/).
 
 ## [Nieopublikowane]
 
+## [1.2.1] - 2026-06-25
+
+### Dodane
+- `miodek confluence correct --runpod` — korekta stron Confluence realnym Bielikiem na efemerycznym podzie RunPod (jak `miodek correct --runpod`).
+
 ## [1.2.0] - 2026-06-25
 
 ### Dodane
