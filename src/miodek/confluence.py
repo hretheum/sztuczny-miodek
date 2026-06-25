@@ -224,94 +224,108 @@ def _correct(args) -> int:
     potwierdzeniem. Makra, kod i struktura nietknięte; twarda weryfikacja wierności przed PUT."""
     import sys
     import difflib
-    from miodek import corrector
+    from miodek import corrector, runner
     from miodek import adapter as adp
 
+    conf_adapter = adp.ConfluenceStorageAdapter()
+
+    def process(engine, stage2_fn) -> int:
+        errors = 0
+        for pid in args.page:
+            try:
+                page = fetch_page(pid, instance=args.instance)
+            except ConfluenceNotConfigured as e:
+                print(f"[ERROR] {e}", file=sys.stderr)
+                return 2
+            except Exception as e:  # noqa: BLE001
+                print(f"[ERROR] nie pobrano strony {pid}: {e}", file=sys.stderr)
+                errors += 1
+                continue
+
+            # Korekta na PROZIE (sprawdzony korektor); poprawki wracają na storage przez alignment
+            # akapitów (korektor zachowuje ich liczbę) + write_back adaptera.
+            doc = conf_adapter.normalize(page.storage)
+            result = corrector.correct_document(
+                doc.text, file_path="_confluence_audit.txt", engine=engine, stage2_fn=stage2_fn,
+            )
+            errors += _apply_one(args, conf_adapter, adp, difflib, page, pid, doc, result)
+        return 1 if errors else 0
+
+    # --runpod: efemeryczny pod owija przebieg (create→...→terminate); wewnątrz czysty run_stage2.
+    # Nadpisuje --engine. Bez --runpod: silnik z configu/--engine, auto-offload przez managed stage2.
+    if args.runpod:
+        try:
+            with runner.build_ephemeral_runpod(args.config) as pod:
+                engine = runner.build_runpod_engine(args.config, pod=pod)
+                return process(engine, runner.run_stage2)
+        except Exception as e:  # noqa: BLE001
+            print(f"[ERROR] efemeryczny pod RunPod: {e}", file=sys.stderr)
+            return 2
     try:
         engine = corrector.build_corrector_engine(name=args.engine, config_path=args.config)
     except Exception as e:  # noqa: BLE001
         print(f"[ERROR] nie zbudowano silnika korektora: {e}", file=sys.stderr)
         return 2
+    return process(engine, corrector._make_managed_stage2(args.config))
 
-    conf_adapter = adp.ConfluenceStorageAdapter()
 
-    changed_any = False
-    errors = 0
-    for pid in args.page:
+def _apply_one(args, conf_adapter, adp, difflib, page, pid, doc, result) -> int:
+    """Składa storage z poprawek, weryfikuje wierność, pokazuje diff i (z --apply) zapisuje.
+    Zwraca liczbę błędów (0/1) tej strony."""
+    import sys
+    new_storage = page.storage
+    if result.text != doc.text:
+        orig_paras = doc.paragraphs()
+        new_paras = adp.split_paragraphs_faithful(result.text)
+        if len(orig_paras) != len(new_paras):
+            print(f"[ABORT] „{page.title}” (id {pid}): korekta zmieniła liczbę akapitów "
+                  "(nieoczekiwane); nie składam z powrotem.", file=sys.stderr)
+            return 1
+        edits = [adp.Edit(o.start, o.end, n.text)
+                 for o, n in zip(orig_paras, new_paras) if o.text != n.text]
+        new_storage = conf_adapter.write_back(doc, edits)
+    if new_storage == page.storage:
+        print(f"[confluence] „{page.title}” (id {pid}): brak zmian "
+              f"(werdykt korektora: {result.reason}).", file=sys.stderr)
+        return 0
+
+    # TWARDA BRAMKA: nowy storage może różnić się od oryginału WYŁĄCZNIE prozą.
+    if not adp.verify_prose_only_change(page.storage, new_storage):
+        print(f"[ABORT] „{page.title}” (id {pid}): weryfikacja wierności nie przeszła "
+              "(zmiana dotknęłaby makr/struktury). NIE zapisuję.", file=sys.stderr)
+        return 1
+
+    # Diff prozy (czytelny dla człowieka) — przed/po na wyłuskanym tekście.
+    old_prose = conf_adapter.normalize(page.storage).text.splitlines()
+    new_prose = conf_adapter.normalize(new_storage).text.splitlines()
+    diff = list(difflib.unified_diff(old_prose, new_prose,
+                                     fromfile=f"{pid} (przed)", tofile=f"{pid} (po)", lineterm=""))
+    print(f"\n=== „{page.title}” (id {pid}, wersja {page.version}) — proponowana korekta prozy ===")
+    print("\n".join(diff) if diff else "(zmiana tylko w obrębie linii)")
+
+    if not args.apply:
+        print(f"[dry-run] NIE zapisano. Dodaj --apply, aby zapisać jako wersję {page.version + 1}.",
+              file=sys.stderr)
+        return 0
+
+    if not args.yes:
         try:
-            page = fetch_page(pid, instance=args.instance)
-        except ConfluenceNotConfigured as e:
-            print(f"[ERROR] {e}", file=sys.stderr)
-            return 2
-        except Exception as e:  # noqa: BLE001
-            print(f"[ERROR] nie pobrano strony {pid}: {e}", file=sys.stderr)
-            errors += 1
-            continue
-
-        # Korekta prowadzona na PROZIE (sprawdzony korektor na .txt). Poprawki wracają na storage
-        # przez alignment akapitów (korektor zachowuje liczbę akapitów) + write_back adaptera.
-        doc = conf_adapter.normalize(page.storage)
-        result = corrector.correct_document(
-            doc.text, file_path="_confluence_audit.txt", engine=engine,
-            stage2_fn=corrector._make_managed_stage2(args.config),  # auto-offload poda RunPod po użyciu
-        )
-        new_storage = page.storage
-        if result.text != doc.text:
-            orig_paras = doc.paragraphs()
-            new_paras = adp.split_paragraphs_faithful(result.text)
-            if len(orig_paras) != len(new_paras):
-                print(f"[ABORT] „{page.title}” (id {pid}): korekta zmieniła liczbę akapitów "
-                      "(nieoczekiwane); nie składam z powrotem.", file=sys.stderr)
-                errors += 1
-                continue
-            edits = [adp.Edit(o.start, o.end, n.text)
-                     for o, n in zip(orig_paras, new_paras) if o.text != n.text]
-            new_storage = conf_adapter.write_back(doc, edits)
-        if new_storage == page.storage:
-            print(f"[confluence] „{page.title}” (id {pid}): brak zmian "
-                  f"(werdykt korektora: {result.reason}).", file=sys.stderr)
-            continue
-
-        # TWARDA BRAMKA: nowy storage może różnić się od oryginału WYŁĄCZNIE prozą.
-        if not adp.verify_prose_only_change(page.storage, new_storage):
-            print(f"[ABORT] „{page.title}” (id {pid}): weryfikacja wierności nie przeszła "
-                  "(zmiana dotknęłaby makr/struktury). NIE zapisuję.", file=sys.stderr)
-            errors += 1
-            continue
-
-        # Diff prozy (czytelny dla człowieka) — przed/po na wyłuskanym tekście.
-        old_prose = conf_adapter.normalize(page.storage).text.splitlines()
-        new_prose = conf_adapter.normalize(new_storage).text.splitlines()
-        diff = list(difflib.unified_diff(old_prose, new_prose,
-                                         fromfile=f"{pid} (przed)", tofile=f"{pid} (po)", lineterm=""))
-        print(f"\n=== „{page.title}” (id {pid}, wersja {page.version}) — proponowana korekta prozy ===")
-        print("\n".join(diff) if diff else "(zmiana tylko w obrębie linii)")
-        changed_any = True
-
-        if not args.apply:
-            print(f"[dry-run] NIE zapisano. Dodaj --apply, aby zapisać jako wersję {page.version + 1}.",
-                  file=sys.stderr)
-            continue
-
-        if not args.yes:
-            try:
-                ans = input(f"Zapisać stronę {pid} „{page.title}” jako wersję {page.version + 1}? [t/N] ")
-            except EOFError:
-                ans = ""
-            if ans.strip().lower() not in ("t", "tak", "y", "yes"):
-                print(f"[pominięto] {pid}: bez zapisu (brak potwierdzenia).", file=sys.stderr)
-                continue
-        try:
-            updated = update_page(page, new_storage, instance=args.instance)
-            print(f"[zapisano] {pid}: wersja {updated.version}.", file=sys.stderr)
-        except ConfluenceConflict as e:
-            print(f"[ABORT] {e}", file=sys.stderr)
-            errors += 1
-        except Exception as e:  # noqa: BLE001
-            print(f"[ERROR] zapis {pid} nie powiódł się: {e}", file=sys.stderr)
-            errors += 1
-
-    return 1 if errors else 0
+            ans = input(f"Zapisać stronę {pid} „{page.title}” jako wersję {page.version + 1}? [t/N] ")
+        except EOFError:
+            ans = ""
+        if ans.strip().lower() not in ("t", "tak", "y", "yes"):
+            print(f"[pominięto] {pid}: bez zapisu (brak potwierdzenia).", file=sys.stderr)
+            return 0
+    try:
+        updated = update_page(page, new_storage, instance=args.instance)
+        print(f"[zapisano] {pid}: wersja {updated.version}.", file=sys.stderr)
+        return 0
+    except ConfluenceConflict as e:
+        print(f"[ABORT] {e}", file=sys.stderr)
+        return 1
+    except Exception as e:  # noqa: BLE001
+        print(f"[ERROR] zapis {pid} nie powiódł się: {e}", file=sys.stderr)
+        return 1
 
 
 def main(argv=None) -> int:
@@ -342,6 +356,9 @@ def main(argv=None) -> int:
                       help="ID strony Confluence (można podać wiele).")
     corr.add_argument("--engine", default=None, choices=("stub", "openai", "ollama"),
                       help="Silnik korekty (nadpisuje config). Domyślnie z config.json.")
+    corr.add_argument("--runpod", action="store_true",
+                      help="Postaw efemeryczny pod z Bielikiem na RunPodzie, popraw, zgaś pod. "
+                           "Nadpisuje --engine. Wymaga RUNPOD_API_KEY w env.")
     corr.add_argument("--config", default=_config.CONFIG_PATH, help="Ścieżka config.json.")
     corr.add_argument("--lang", choices=["pl", "en", "both"], default="both")
     corr.add_argument("--instance", default=None, metavar="NAZWA",
