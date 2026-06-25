@@ -14,6 +14,24 @@ export CONFLUENCE_TOKEN=...   # token API Atlassiana
 
 Wzór w `.env.example`. Token o zawężonym zakresie (tylko odczyt treści) jest bezpieczniejszy, zgodnie z zasadą najmniejszych uprawnień.
 
+### Wiele instancji
+
+Do obsługi kilku przestrzeni Confluence (na przykład osobistej i firmowej) bez podmiany zmiennych użyj nazwanych slotów. Slot to zestaw z prefiksem `CONFLUENCE_<NAZWA>_`:
+
+```bash
+export CONFLUENCE_TC_BASE_URL=https://twoja-domena.atlassian.net/wiki
+export CONFLUENCE_TC_EMAIL=ty@example.com
+export CONFLUENCE_TC_TOKEN=...
+```
+
+Flaga `--instance tc` wybiera ten slot:
+
+```bash
+miodek confluence pull --page 11763713 --instance tc
+```
+
+Nazwa instancji jest normalizowana do wielkich liter (`--instance tc` szuka `CONFLUENCE_TC_*`). Bez flagi `--instance` używany jest domyślny zestaw `CONFLUENCE_*`. Brak slotu wskazanej instancji daje czytelny błąd z nazwami brakujących zmiennych.
+
 ## Pull: audyt prozy strony
 
 ```bash

@@ -42,20 +42,41 @@ class ConfluencePage:
     space_key: Optional[str] = None
 
 
+def _instance_env_names(instance: Optional[str]):
+    """Nazwy zmiennych ENV dla danej instancji. Bez instancji => domyślny zestaw CONFLUENCE_*.
+    Z instancją „tc" => CONFLUENCE_TC_BASE_URL/_EMAIL/_TOKEN (nazwa do wielkich liter, znaki spec na _)."""
+    if not instance:
+        return BASE_URL_ENV, EMAIL_ENV, TOKEN_ENV
+    import re
+    slug = re.sub(r"[^A-Z0-9]+", "_", instance.upper()).strip("_")
+    if not slug:
+        # Same znaki specjalne (np. „---") dałyby pusty slug i cichą kolizję z domyślnym zestawem.
+        raise ConfluenceNotConfigured(
+            f"Nazwa instancji {instance!r} jest pusta po normalizacji (brak liter ani cyfr). "
+            "Użyj nazwy jak „tc”, „firma”, „prv”."
+        )
+    pre = f"CONFLUENCE_{slug}_"
+    return pre + "BASE_URL", pre + "EMAIL", pre + "TOKEN"
+
+
 def resolve_config(base_url: Optional[str] = None, email: Optional[str] = None,
-                   token: Optional[str] = None):
+                   token: Optional[str] = None, instance: Optional[str] = None):
     """Ustala (base_url, email, token) z argumentów lub ENV. Brak któregokolwiek => błąd.
 
-    Pierwszeństwo ma argument jawny, potem ENV. Wartości sekretów nigdy nie trafiają do komunikatu
-    błędu (echo'wane są tylko NAZWY zmiennych, jak w languagetool/runpod)."""
-    base_url = base_url or os.environ.get(BASE_URL_ENV, "")
-    email = email or os.environ.get(EMAIL_ENV, "")
-    token = token or os.environ.get(TOKEN_ENV, "")
+    `instance` wybiera nazwany slot w ENV (CONFLUENCE_<NAZWA>_*), do obsługi wielu przestrzeni
+    Confluence bez podmiany zmiennych. Bez instancji => domyślny zestaw CONFLUENCE_* (wstecznie
+    zgodne). Pierwszeństwo ma argument jawny, potem ENV. Wartości sekretów nigdy nie trafiają do
+    komunikatu błędu (echo'wane są tylko NAZWY zmiennych, jak w languagetool/runpod)."""
+    base_env, email_env, token_env = _instance_env_names(instance)
+    base_url = base_url or os.environ.get(base_env, "")
+    email = email or os.environ.get(email_env, "")
+    token = token or os.environ.get(token_env, "")
     missing = [name for name, val in
-               ((BASE_URL_ENV, base_url), (EMAIL_ENV, email), (TOKEN_ENV, token)) if not val]
+               ((base_env, base_url), (email_env, email), (token_env, token)) if not val]
     if missing:
+        gdzie = f" (instancja „{instance}”)" if instance else ""
         raise ConfluenceNotConfigured(
-            "Connector Confluence nie jest skonfigurowany. Ustaw zmienne środowiskowe: "
+            f"Connector Confluence nie jest skonfigurowany{gdzie}. Ustaw zmienne środowiskowe: "
             + ", ".join(missing) + ". Wzór w .env.example."
         )
     return base_url.rstrip("/"), email, token
@@ -84,11 +105,11 @@ def parse_page(raw: str) -> ConfluencePage:
 
 
 def fetch_page(page_id: str, *, base_url: Optional[str] = None, email: Optional[str] = None,
-               token: Optional[str] = None, transport: Optional[Callable] = None,
-               timeout: float = 30.0) -> ConfluencePage:
-    """Pobiera stronę po ID w formacie storage. Sekrety z ENV (lub argumentów). Transport
-    wstrzykiwalny (atrapa w testach => zero realnej sieci, jak w languagetool/engines)."""
-    base, email, token = resolve_config(base_url, email, token)
+               token: Optional[str] = None, instance: Optional[str] = None,
+               transport: Optional[Callable] = None, timeout: float = 30.0) -> ConfluencePage:
+    """Pobiera stronę po ID w formacie storage. Sekrety z ENV (lub argumentów); `instance` wybiera
+    nazwany slot. Transport wstrzykiwalny (atrapa w testach => zero realnej sieci)."""
+    base, email, token = resolve_config(base_url, email, token, instance)
     auth = base64.b64encode(f"{email}:{token}".encode()).decode()
     headers = {"Authorization": f"Basic {auth}", "Accept": "application/json",
                "User-Agent": USER_AGENT}
@@ -114,13 +135,14 @@ def _default_write_transport(url: str, *, method: str, headers: dict, data: byte
 
 
 def update_page(page: ConfluencePage, new_storage: str, *, base_url=None, email=None, token=None,
-                transport=None, timeout: float = 30.0, comment: str = "miodek: korekta prozy") -> ConfluencePage:
+                instance=None, transport=None, timeout: float = 30.0,
+                comment: str = "miodek: korekta prozy") -> ConfluencePage:
     """Zapisuje zredagowany storage jako NOWĄ wersję (numer N+1). Bezpieczne do wielokrotnego
     uruchomienia: gdy storage bez zmian, pomija PUT (nie pompuje wersji). Konflikt wersji (409)
-    przerywa bez nadpisania cudzej zmiany."""
+    przerywa bez nadpisania cudzej zmiany. `instance` wybiera nazwany slot poświadczeń."""
     if new_storage == page.storage:
         return page  # brak zmian — nie tworzymy nowej wersji
-    base, email, token = resolve_config(base_url, email, token)
+    base, email, token = resolve_config(base_url, email, token, instance)
     auth = base64.b64encode(f"{email}:{token}".encode()).decode()
     headers = {"Authorization": f"Basic {auth}", "Content-Type": "application/json",
                "Accept": "application/json", "User-Agent": USER_AGENT}
@@ -162,7 +184,7 @@ def _pull(args) -> int:
     fetch_errors = 0
     for pid in args.page:
         try:
-            page = fetch_page(pid)
+            page = fetch_page(pid, instance=args.instance)
         except ConfluenceNotConfigured as e:
             # Brak konfiguracji dotyczy wszystkich stron — nie ma sensu próbować dalej.
             print(f"[ERROR] {e}", file=sys.stderr)
@@ -217,7 +239,7 @@ def _correct(args) -> int:
     errors = 0
     for pid in args.page:
         try:
-            page = fetch_page(pid)
+            page = fetch_page(pid, instance=args.instance)
         except ConfluenceNotConfigured as e:
             print(f"[ERROR] {e}", file=sys.stderr)
             return 2
@@ -280,7 +302,7 @@ def _correct(args) -> int:
                 print(f"[pominięto] {pid}: bez zapisu (brak potwierdzenia).", file=sys.stderr)
                 continue
         try:
-            updated = update_page(page, new_storage)
+            updated = update_page(page, new_storage, instance=args.instance)
             print(f"[zapisano] {pid}: wersja {updated.version}.", file=sys.stderr)
         except ConfluenceConflict as e:
             print(f"[ABORT] {e}", file=sys.stderr)
@@ -308,6 +330,9 @@ def main(argv=None) -> int:
     pull.add_argument("--out", default="conflu",
                       help="Katalog na wyłuskaną prozę (.txt). Domyślnie ./conflu.")
     pull.add_argument("--lang", choices=["pl", "en", "both"], default="both")
+    pull.add_argument("--instance", default=None, metavar="NAZWA",
+                      help="Nazwany slot poświadczeń z env (CONFLUENCE_<NAZWA>_*). "
+                           "Domyślnie zestaw CONFLUENCE_*.")
     pull.add_argument("--report", action="store_true",
                       help="Dołóż zbiorczy agregat batch (== BATCH ==).")
 
@@ -319,6 +344,9 @@ def main(argv=None) -> int:
                       help="Silnik korekty (nadpisuje config). Domyślnie z config.json.")
     corr.add_argument("--config", default=_config.CONFIG_PATH, help="Ścieżka config.json.")
     corr.add_argument("--lang", choices=["pl", "en", "both"], default="both")
+    corr.add_argument("--instance", default=None, metavar="NAZWA",
+                      help="Nazwany slot poświadczeń z env (CONFLUENCE_<NAZWA>_*). "
+                           "Domyślnie zestaw CONFLUENCE_*.")
     corr.add_argument("--apply", action="store_true",
                       help="Zapisz zmiany do Confluence. Bez tej flagi: dry-run (tylko diff).")
     corr.add_argument("--yes", action="store_true",

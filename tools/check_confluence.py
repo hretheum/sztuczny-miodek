@@ -49,6 +49,33 @@ def main():
             if v is not None:
                 os.environ[k] = v
 
+    # 1b. nazwane instancje: --instance czyta slot CONFLUENCE_<NAZWA>_*, brak slotu => błąd z nazwą
+    b, e, t = confluence._instance_env_names("tc")
+    if (b, e, t) != ("CONFLUENCE_TC_BASE_URL", "CONFLUENCE_TC_EMAIL", "CONFLUENCE_TC_TOKEN"):
+        fails.append(f"_instance_env_names('tc') rozjechane: {(b, e, t)}")
+    os.environ["CONFLUENCE_TC_BASE_URL"] = "https://x.example/wiki"
+    os.environ["CONFLUENCE_TC_EMAIL"] = "e@x"
+    os.environ["CONFLUENCE_TC_TOKEN"] = "tok"
+    try:
+        base, _, _ = confluence.resolve_config(instance="tc")
+        if base != "https://x.example/wiki":
+            fails.append("resolve_config(instance='tc') nie wziął slotu instancji")
+    finally:
+        for k in ("CONFLUENCE_TC_BASE_URL", "CONFLUENCE_TC_EMAIL", "CONFLUENCE_TC_TOKEN"):
+            os.environ.pop(k, None)
+    try:
+        confluence.resolve_config(instance="orlen")
+        fails.append("resolve_config(instance='orlen') bez slotu powinno rzucić błąd")
+    except confluence.ConfluenceNotConfigured as exc:
+        if "CONFLUENCE_ORLEN_BASE_URL" not in str(exc):
+            fails.append("błąd instancji nie wymienia nazwy slotu CONFLUENCE_ORLEN_*")
+    # instancja z samych znaków specjalnych => pusty slug => błąd (nie cicha kolizja z domyślnym)
+    try:
+        confluence._instance_env_names("---")
+        fails.append("_instance_env_names('---') powinno rzucić błąd (pusty slug), nie cofnąć się do domyślnego")
+    except confluence.ConfluenceNotConfigured:
+        pass
+
     # 2. fetch_page z atrapą transportu (zero sieci) => poprawny parse
     def fake_transport(url, *, headers, timeout):
         if "/rest/api/content/123" not in url:
@@ -106,7 +133,8 @@ def main():
         for f in fails:
             print(f"  - {f}", file=sys.stderr)
         sys.exit(1)
-    print("OK   Confluence (KAN-233/234): resolve_config bez ENV => błąd, fetch_page parsuje storage "
+    print("OK   Confluence (KAN-233/234/235): nazwane instancje (--instance => slot CONFLUENCE_<NAZWA>_*, "
+          "brak slotu => błąd z nazwą); resolve_config bez ENV => błąd, fetch_page parsuje storage "
           "przez atrapę transportu (zero sieci), adapter daje czystą prozę (makra/kod jako wyspy); "
           "write_back podmienia akapit (encje zescapowane, makra nietknięte), verify łapie zepsucie "
           "makra, update_page pomija PUT bez zmian i podnosi konflikt na 409.")
